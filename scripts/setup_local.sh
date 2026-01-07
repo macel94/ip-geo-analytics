@@ -5,6 +5,10 @@ set -e
 GREEN='\033[0;32m'
 NC='\033[0m' # No Color
 
+# Ensure we are executing from the project root
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR/.."
+
 echo -e "${GREEN}1. Installing dependencies (Root)...${NC}"
 npm install
 

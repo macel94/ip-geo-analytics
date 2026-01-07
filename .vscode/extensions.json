@@ -1,0 +1,9 @@
+{
+    "recommendations": [
+        "bpruitt-goddard.mermaid-markdown-syntax-highlighting",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "Prisma.prisma",
+        "ms-azuretools.vscode-docker"
+    ]
+}
