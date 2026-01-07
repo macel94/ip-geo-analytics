@@ -5,30 +5,29 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Visit {
-  id          Int      @id @default(autoincrement())
-  site_id     String
-  ip_address  String
-  
+  id         Int    @id @default(autoincrement())
+  site_id    String
+  ip_address String
+
   // Enriched Data
   city        String?
   country     String?
   countryCode String?
   asn         String?
   org         String?
-  
+
   // User Agent Data
-  browser     String?
-  os          String?
-  device      String?
-  
-  referrer    String?
-  user_agent  String?
-  
-  created_at  DateTime @default(now())
+  browser String?
+  os      String?
+  device  String?
+
+  referrer   String?
+  user_agent String?
+
+  created_at DateTime @default(now())
 
   @@index([site_id, created_at])
   @@index([created_at])

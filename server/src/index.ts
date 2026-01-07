@@ -1,3 +1,4 @@
+import "dotenv/config";
 import Fastify, { FastifyRequest } from "fastify";
 import path from "path";
 import fastifyStatic from "@fastify/static";
@@ -12,8 +13,13 @@ const fastify = Fastify({
 });
 
 const PORT = Number(process.env.PORT) || 3000;
+const databaseUrl = process.env.DATABASE_URL;
 
-const prisma = new PrismaClient();
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL is required to start the server.");
+}
+
+const prisma = new PrismaClient({ datasourceUrl: databaseUrl });
 
 // Initialize services
 initGeoIp();
