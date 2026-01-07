@@ -1,0 +1,17 @@
+{
+  "name": "ip-geo-analytics-monorepo",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "setup": "./scripts/setup_local.sh",
+    "dev": "./scripts/start_dev.sh",
+    "db:up": "docker-compose up -d",
+    "db:down": "docker-compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

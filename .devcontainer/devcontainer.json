@@ -1,0 +1,32 @@
+{
+  "name": "Visitor Analytics Dev",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:1-18-bullseye",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "enableNonRootDocker": "true",
+      "moby": "true"
+    },
+    "ghcr.io/devcontainers/features/azure-cli:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "username": "node",
+      "upgradePackages": true
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "Prisma.prisma",
+        "ms-azuretools.vscode-docker",
+        "ms-vscode.vscode-typescript-next"
+      ]
+    }
+  },
+  "forwardPorts": [3000, 5173, 5432],
+  "postCreateCommand": "sudo chmod +x scripts/*.sh && echo 'Dev container ready. Run ./scripts/setup_local.sh to initialize.'"
+}
