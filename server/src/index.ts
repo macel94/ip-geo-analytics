@@ -43,7 +43,11 @@ fastify.post<{ Body: TrackBody }>("/api/track", async (request, reply) => {
   const ip = request.ip;
 
   // GeoIP Lookup
-  const geo = getGeoData(ip) || { city: null, country: null, countryCode: null };
+  const geo = getGeoData(ip) || {
+    city: null,
+    country: null,
+    countryCode: null,
+  };
 
   // UA Parsing
   const ua = new UAParser(userAgentString);
@@ -102,9 +106,9 @@ fastify.get("/api/stats", async (request, reply) => {
     where: { ...where, city: { not: null } },
     _count: { _all: true },
     orderBy: {
-        _count: {
-            city: 'desc'
-        }
+      _count: {
+        city: "desc",
+      },
     },
     take: 100, // Limit for performance
   });
