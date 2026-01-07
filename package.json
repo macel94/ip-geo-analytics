@@ -9,9 +9,15 @@
     "setup": "./scripts/setup_local.sh",
     "dev": "./scripts/start_dev.sh",
     "db:up": "docker-compose up -d",
-    "db:down": "docker-compose down"
+    "db:down": "docker-compose down",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:setup": "./scripts/test_setup.sh"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@playwright/test": "^1.57.0",
+    "concurrently": "^8.2.2",
+    "playwright": "^1.57.0"
   }
 }
