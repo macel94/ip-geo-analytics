@@ -13,7 +13,8 @@ import pg from 'pg';
  */
 
 const API_BASE_URL = 'http://localhost:3000';
-const DATABASE_URL = 'postgresql://admin:password123@localhost:5432/analytics?schema=public';
+// Use same DATABASE_URL as local development - these are non-production test credentials
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://admin:password123@localhost:5432/analytics?schema=public';
 
 // Initialize Prisma client for database validation
 let prisma: PrismaClient;
@@ -176,14 +177,14 @@ test.describe('E2E: Complete System Setup and Functionality', () => {
     console.log(`✓ UI updated: ${initialVisits} → ${updatedVisits} visits`);
   });
 
-  test('should filter stats by site_id', async ({ page }) => {
+  test('should filter stats by site_id', async ({ page, request }) => {
     // First, create some test visits with specific site_id
     const testSiteId = 'filter-test-' + Date.now();
     
-    await fetch(`${API_BASE_URL}/api/track`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ site_id: testSiteId })
+    await request.post(`${API_BASE_URL}/api/track`, {
+      data: {
+        site_id: testSiteId
+      }
     });
     
     // Navigate to the app
