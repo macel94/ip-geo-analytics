@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import pg from 'pg';
 
 /**
  * E2E Test Suite for IP Geo Analytics
@@ -15,12 +17,18 @@ const DATABASE_URL = 'postgresql://admin:password123@localhost:5432/analytics?sc
 
 // Initialize Prisma client for database validation
 let prisma: PrismaClient;
+let pool: pg.Pool;
 
 test.beforeAll(async () => {
+  // Set the DATABASE_URL environment variable for Prisma
+  process.env.DATABASE_URL = DATABASE_URL;
+  
+  // Setup PostgreSQL connection pool for Prisma adapter
+  pool = new pg.Pool({ connectionString: DATABASE_URL });
+  const adapter = new PrismaPg(pool);
+  
   // Connect to database for testing
-  prisma = new PrismaClient({
-    datasourceUrl: DATABASE_URL
-  });
+  prisma = new PrismaClient({ adapter });
   
   // Verify database connection
   await prisma.$connect();
@@ -30,6 +38,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   // Clean up
   await prisma.$disconnect();
+  await pool.end();
 });
 
 test.describe('E2E: Complete System Setup and Functionality', () => {

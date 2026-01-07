@@ -16,7 +16,7 @@ echo -e "${GREEN}Setting up E2E test environment...${NC}"
 echo -e "${YELLOW}1. Checking database status...${NC}"
 if ! docker ps | grep -q ip-geo-postgres; then
     echo "Database not running. Starting it now..."
-    docker-compose up -d
+    docker compose up -d
     
     echo "Waiting for database to be ready..."
     until docker exec ip-geo-postgres pg_isready -U admin -d analytics 2>/dev/null; do

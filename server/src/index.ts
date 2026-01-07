@@ -4,6 +4,8 @@ import path from "path";
 import fastifyStatic from "@fastify/static";
 import fastifyCors from "@fastify/cors";
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import pg from "pg";
 import { initGeoIp, getGeoData } from "./services/geoip";
 import { UAParser } from "ua-parser-js";
 
@@ -19,7 +21,10 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is required to start the server.");
 }
 
-const prisma = new PrismaClient({ datasourceUrl: databaseUrl });
+// Setup PostgreSQL connection pool for Prisma adapter
+const pool = new pg.Pool({ connectionString: databaseUrl });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 // Initialize services
 initGeoIp();
