@@ -6,8 +6,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node-dev src/index.ts",
-    "prisma:generate": "prisma generate",
-    "prisma:push": "prisma db push"
+    "prisma:generate": "prisma generate --config prisma/prisma.config.ts",
+    "prisma:push": "prisma db push --config prisma/prisma.config.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.0",

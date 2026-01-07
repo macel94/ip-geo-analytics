@@ -1,4 +1,9 @@
 import { defineConfig } from "@prisma/config";
+import dotenv from "dotenv";
+import path from "path";
+
+// Load environment variables explicitly
+dotenv.config({ path: path.join(__dirname, "../.env") });
 
 const databaseUrl = process.env.DATABASE_URL;
 
