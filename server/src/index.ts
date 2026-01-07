@@ -4,7 +4,7 @@ import fastifyStatic from "@fastify/static";
 import fastifyCors from "@fastify/cors";
 import { PrismaClient } from "@prisma/client";
 import { initGeoIp, getGeoData } from "./services/geoip";
-import UAParser from "ua-parser-js";
+import { UAParser } from "ua-parser-js";
 
 const fastify = Fastify({
   logger: true,

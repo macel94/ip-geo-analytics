@@ -1,6 +1,6 @@
 {
   "name": "Visitor Analytics Dev",
-  "image": "mcr.microsoft.com/devcontainers/typescript-node:1-18-bullseye",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm",
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {
       "version": "latest",
@@ -27,6 +27,10 @@
       ]
     }
   },
-  "forwardPorts": [3000, 5173, 5432],
+  "forwardPorts": [
+    3000,
+    5173,
+    5432
+  ],
   "postCreateCommand": "sudo chmod +x scripts/*.sh && echo 'Dev container ready. Run ./scripts/setup_local.sh to initialize.'"
 }
