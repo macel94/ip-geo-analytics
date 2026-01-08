@@ -71,6 +71,18 @@ npm run test:e2e:ui        # interactive UI mode
 - ✓ Analytics filtering by site_id
 - ✓ Data integrity and aggregation
 
+### Continuous Integration
+
+The E2E tests run automatically on every pull request via GitHub Actions. The workflow:
+- Sets up PostgreSQL database service
+- Installs all dependencies
+- Generates Prisma client and pushes database schema
+- Builds the client application
+- Runs the complete E2E test suite
+- Uploads test reports and results as artifacts
+
+See [`.github/workflows/e2e-tests.yml`](.github/workflows/e2e-tests.yml) for the full workflow configuration.
+
 ## Docker
 
 The root [Dockerfile](Dockerfile) builds client and server into a single image (Node 24 Alpine). In prod the Fastify server serves the built SPA.
