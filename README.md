@@ -24,7 +24,7 @@ Visitor analytics demo (Fastify + Prisma + React/Vite) that records IP, User-Age
 ## Prisma 7 notes
 
 - Datasource URL now lives in [server/prisma/prisma.config.ts](server/prisma/prisma.config.ts); `schema.prisma` no longer contains `url`.
-- Prisma Client instantiation passes `datasourceUrl` (see [server/src/index.ts](server/src/index.ts)).
+- Prisma Client instantiation uses PostgreSQL adapter via `@prisma/adapter-pg` (see [server/src/index.ts](server/src/index.ts)).
 - Helpful commands (from `server/`):
   - `npx prisma validate`
   - `npx prisma format`
@@ -36,6 +36,52 @@ Visitor analytics demo (Fastify + Prisma + React/Vite) that records IP, User-Age
 
 - `./scripts/setup_local.sh` — one-time/local bootstrap (deps, db, env, db push)
 - `./scripts/start_dev.sh` — concurrent dev servers (Fastify + Vite)
+- `./scripts/test_setup.sh` — prepare environment for E2E tests
+
+## Testing
+
+### E2E Tests
+
+Comprehensive end-to-end tests using Playwright that validate:
+- Database connectivity and schema correctness
+- Server API endpoints (/api/track, /api/stats)
+- Client application rendering and navigation
+- Visit tracking and data persistence
+- Analytics aggregation and filtering
+- Complete system integration
+
+**Setup and Run:**
+
+```bash
+# One-time setup for E2E tests
+npm run test:setup    # or ./scripts/test_setup.sh
+
+# Run tests
+npm run test:e2e           # headless mode (CI/CD)
+npm run test:e2e:headed    # with browser visible
+npm run test:e2e:ui        # interactive UI mode
+```
+
+**Test Coverage:**
+- ✓ Database schema validation
+- ✓ Server health checks and API responses
+- ✓ Visit tracking with IP, user-agent, and referrer
+- ✓ Data persistence across operations
+- ✓ UI rendering and interaction
+- ✓ Analytics filtering by site_id
+- ✓ Data integrity and aggregation
+
+### Continuous Integration
+
+The E2E tests run automatically on every pull request via GitHub Actions. The workflow:
+- Sets up PostgreSQL database service
+- Installs all dependencies
+- Generates Prisma client and pushes database schema
+- Builds the client application
+- Runs the complete E2E test suite
+- Uploads test reports and results as artifacts
+
+See [`.github/workflows/e2e-tests.yml`](.github/workflows/e2e-tests.yml) for the full workflow configuration.
 
 ## Docker
 
