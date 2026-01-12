@@ -44,6 +44,78 @@ interface TrackBody {
   referrer?: string;
 }
 
+// Health Check Endpoint - for load balancers and monitoring
+fastify.get("/health", async (request, reply) => {
+  try {
+    // Check database connectivity
+    await prisma.$queryRaw`SELECT 1`;
+    return { 
+      status: "healthy", 
+      timestamp: new Date().toISOString(),
+      database: "connected"
+    };
+  } catch (error) {
+    reply.code(503);
+    return { 
+      status: "unhealthy", 
+      timestamp: new Date().toISOString(),
+      database: "disconnected",
+      error: error instanceof Error ? error.message : "Unknown error"
+    };
+  }
+});
+
+// Readiness Check - for Kubernetes/Container Apps
+fastify.get("/ready", async (request, reply) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return { status: "ready" };
+  } catch (error) {
+    reply.code(503);
+    return { status: "not ready" };
+  }
+});
+
+// Metrics Endpoint - basic Prometheus-style metrics
+let requestCount = 0;
+let trackingCount = 0;
+let errorCount = 0;
+const startTime = Date.now();
+
+fastify.addHook('onRequest', async (request, reply) => {
+  requestCount++;
+});
+
+fastify.get("/metrics", async (request, reply) => {
+  const uptime = (Date.now() - startTime) / 1000;
+  const metrics = [
+    `# HELP http_requests_total Total number of HTTP requests`,
+    `# TYPE http_requests_total counter`,
+    `http_requests_total ${requestCount}`,
+    ``,
+    `# HELP tracking_requests_total Total number of tracking requests`,
+    `# TYPE tracking_requests_total counter`,
+    `tracking_requests_total ${trackingCount}`,
+    ``,
+    `# HELP http_errors_total Total number of HTTP errors`,
+    `# TYPE http_errors_total counter`,
+    `http_errors_total ${errorCount}`,
+    ``,
+    `# HELP process_uptime_seconds Process uptime in seconds`,
+    `# TYPE process_uptime_seconds gauge`,
+    `process_uptime_seconds ${uptime}`,
+    ``,
+    `# HELP nodejs_memory_usage_bytes Node.js memory usage in bytes`,
+    `# TYPE nodejs_memory_usage_bytes gauge`,
+    `nodejs_memory_usage_bytes{type="rss"} ${process.memoryUsage().rss}`,
+    `nodejs_memory_usage_bytes{type="heapTotal"} ${process.memoryUsage().heapTotal}`,
+    `nodejs_memory_usage_bytes{type="heapUsed"} ${process.memoryUsage().heapUsed}`,
+    `nodejs_memory_usage_bytes{type="external"} ${process.memoryUsage().external}`,
+  ].join('\n');
+  
+  reply.type('text/plain').send(metrics);
+});
+
 // 1. Tracking Endpoint
 fastify.post<{ Body: TrackBody }>("/api/track", async (request, reply) => {
   const { site_id, referrer } = request.body;
@@ -82,9 +154,11 @@ fastify.post<{ Body: TrackBody }>("/api/track", async (request, reply) => {
         user_agent: userAgentString,
       },
     });
+    trackingCount++;
     return { success: true };
   } catch (e) {
     request.log.error(e);
+    errorCount++;
     reply.code(500).send({ error: "Tracking failed" });
   }
 });

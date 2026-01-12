@@ -7,6 +7,7 @@ Visitor analytics demo (Fastify + Prisma + React/Vite) that records IP, User-Age
 - Fastify 5, Prisma 7, PostgreSQL
 - React 18 + Vite 5, Leaflet, Chart.js
 - Docker/Docker Compose; Dev Container (Node 24) for local dev
+- **SRE Features**: Health checks, Prometheus metrics, automated CI/CD, security scanning
 
 ## Quick Start (local)
 
@@ -15,6 +16,26 @@ Visitor analytics demo (Fastify + Prisma + React/Vite) that records IP, User-Age
 ./scripts/setup_local.sh   # installs deps, starts Postgres via docker-compose, prisma db push
 ./scripts/start_dev.sh     # runs Fastify (3000) + Vite (5173)
 ```
+
+## SRE & Operations
+
+This project includes comprehensive SRE automation:
+
+- 🚀 **CI/CD**: GitHub Actions for testing, building, security scanning, and deployment
+- 🔒 **Security**: Automated vulnerability scanning, Dependabot, secret detection
+- 📊 **Monitoring**: Health checks, Prometheus metrics, Application Insights
+- 🏗️ **IaC**: Azure Bicep templates and Kubernetes manifests
+- 🔧 **Automation**: Database backups, health monitoring, load testing scripts
+
+**Documentation**:
+- **[SRE Guide](docs/SRE_GUIDE.md)** - Complete automation overview and quick start
+- **[SRE Runbook](docs/SRE_RUNBOOK.md)** - Operational procedures and troubleshooting
+- **[Automation Scripts](docs/AUTOMATION.md)** - Detailed script documentation
+
+**Key Endpoints**:
+- `/health` - Health check with database connectivity
+- `/ready` - Readiness probe for Kubernetes/Container Apps
+- `/metrics` - Prometheus-compatible metrics
 
 ## Environment
 
