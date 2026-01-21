@@ -64,7 +64,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ github.event_name == 'pull_request' && format('{0}:pr-{1}', env.IMAGE_NAME, github.event.pull_request.number) || format('{0}/{1}:sha-{2}', env.REGISTRY, env.IMAGE_NAME, github.sha) }}
+          image-ref: ${{ github.event_name == 'pull_request' && format('{0}/{1}:pr-{2}', env.REGISTRY, env.IMAGE_NAME, github.event.pull_request.number) || format('{0}/{1}:sha-{2}', env.REGISTRY, env.IMAGE_NAME, github.sha) }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
