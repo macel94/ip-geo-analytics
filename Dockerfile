@@ -40,7 +40,7 @@ RUN cd server && npm install prisma
 # Copy built artifacts
 COPY --from=server-builder /app/server/dist ./server/dist
 COPY --from=server-builder /app/server/prisma ./server/prisma
-COPY --from=server-builder /app/server/node_modules/.prisma ./server/node_modules/.prisma
+COPY --from=server-builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=client-builder /app/client/dist ./client/dist
 
 # Create directory for GeoIP database
