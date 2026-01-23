@@ -205,7 +205,7 @@ jobs:
                   storageType: AzureFile
                   storageName: ${{ env.AZURE_STORAGE_MOUNT_NAME }}
               scale:
-                minReplicas: 1
+                minReplicas: 0
                 maxReplicas: 1
           EOF
           
@@ -345,7 +345,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Infrastructure" >> $GITHUB_STEP_SUMMARY
           echo "- **App container**: scale-to-zero enabled (0-3 replicas)" >> $GITHUB_STEP_SUMMARY
-          echo "- **PostgreSQL container**: 1 replica with internal ingress and Azure Files persistent storage" >> $GITHUB_STEP_SUMMARY
+          echo "- **PostgreSQL container**: scale-to-zero enabled (0-1 replicas) with internal ingress and Azure Files persistent storage" >> $GITHUB_STEP_SUMMARY
           echo "- **Storage**: Azure Files share mounted at /var/lib/postgresql/data" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Cost Information" >> $GITHUB_STEP_SUMMARY
