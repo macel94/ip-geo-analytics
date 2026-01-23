@@ -1,12 +1,19 @@
 # Docker Compose file for Azure Container Apps deployment
 # This file is used with `az containerapp compose create` command
 #
-# Note: Azure Container Apps manages the PostgreSQL database separately
-# via Azure Database for PostgreSQL Flexible Server for production use.
-# This compose file is designed for deploying the application container
-# with an external database connection.
+# Cost optimized for test/demo: Uses Container Apps free tier with scale-to-zero.
+# Both containers share the free monthly quota (180k vCPU-sec, 360k GiB-sec).
+# Note: PostgreSQL data uses ephemeral storage - data persists while container runs
+# but will be lost on container restart. For production, use Azure Database for PostgreSQL.
 
 services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=analytics123
+      - POSTGRES_DB=analytics
+
   app:
     image: ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG:-latest}
     ports:
@@ -14,5 +21,6 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - DATABASE_URL=${DATABASE_URL}
-
+      - DATABASE_URL=postgresql://admin:analytics123@postgres:5432/analytics?schema=public
+    depends_on:
+      - postgres

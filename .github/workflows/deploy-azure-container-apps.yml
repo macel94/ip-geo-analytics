@@ -70,8 +70,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy-infrastructure:
-    name: Deploy Infrastructure
+  deploy:
+    name: Deploy to Azure
     runs-on: ubuntu-latest
     needs: build-and-push
     environment: ${{ github.event.inputs.environment || 'staging' }}
@@ -80,7 +80,6 @@ jobs:
       packages: read
     
     outputs:
-      container_app_name: ${{ steps.deploy.outputs.container_app_name }}
       app_url: ${{ steps.deploy.outputs.app_url }}
 
     steps:
@@ -95,7 +94,6 @@ jobs:
       - name: Install Azure CLI extensions
         run: |
           az extension add --name containerapp --upgrade --yes
-          az extension add --name containerapp-compose --upgrade --yes
 
       - name: Create Resource Group
         run: |
@@ -122,89 +120,90 @@ jobs:
             echo "Container Apps Environment already exists"
           fi
 
-      - name: Deploy using Docker Compose
+      - name: Deploy PostgreSQL Container
+        run: |
+          # Deploy PostgreSQL as a separate container app (internal only, no ingress)
+          az containerapp create \
+            --name postgres \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
+            --image postgres:15-alpine \
+            --min-replicas 1 \
+            --max-replicas 1 \
+            --cpu 0.25 \
+            --memory 0.5Gi \
+            --env-vars \
+              "POSTGRES_USER=admin" \
+              "POSTGRES_PASSWORD=analytics123" \
+              "POSTGRES_DB=analytics" \
+            2>/dev/null || \
+          az containerapp update \
+            --name postgres \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --min-replicas 1 \
+            --max-replicas 1
+
+      - name: Get PostgreSQL FQDN
+        id: postgres
+        run: |
+          # Get the internal FQDN for postgres container
+          POSTGRES_FQDN=$(az containerapp show \
+            --name postgres \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "postgres")
+          
+          # For internal communication, use the container app name directly
+          echo "fqdn=postgres" >> $GITHUB_OUTPUT
+
+      - name: Deploy Application Container
         id: deploy
         run: |
-          # Set environment variables for docker-compose
-          export REGISTRY="${{ env.REGISTRY }}"
-          export IMAGE_NAME="${{ env.IMAGE_NAME }}"
-          export IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
-          export DATABASE_URL="${{ secrets.DATABASE_URL }}"
-          
-          # Deploy using az containerapp compose create
-          # This will create/update the container app based on docker-compose.azure.yml
-          az containerapp compose create \
-            --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
+          # Deploy the application container
+          az containerapp create \
+            --name app \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --compose-file-path ./docker-compose.azure.yml \
+            --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image_tag }} \
             --registry-server ${{ env.REGISTRY }} \
             --registry-username ${{ github.actor }} \
             --registry-password ${{ secrets.GITHUB_TOKEN }} \
+            --target-port 3000 \
+            --ingress external \
+            --min-replicas 0 \
+            --max-replicas 3 \
+            --cpu 0.25 \
+            --memory 0.5Gi \
             --env-vars \
               "NODE_ENV=production" \
               "PORT=3000" \
-              "DATABASE_URL=${{ secrets.DATABASE_URL }}"
-          
-          # Get the container app name (derived from service name in compose file)
-          CONTAINER_APP_NAME="app"
-          echo "container_app_name=$CONTAINER_APP_NAME" >> $GITHUB_OUTPUT
+              "DATABASE_URL=postgresql://admin:analytics123@postgres:5432/analytics?schema=public" \
+            2>/dev/null || \
+          az containerapp update \
+            --name app \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image_tag }} \
+            --min-replicas 0 \
+            --max-replicas 3
           
           # Get the app URL
           APP_URL=$(az containerapp show \
-            --name $CONTAINER_APP_NAME \
+            --name app \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --query "properties.configuration.ingress.fqdn" -o tsv)
           echo "app_url=https://$APP_URL" >> $GITHUB_OUTPUT
           echo "Application URL: https://$APP_URL"
 
-  configure-app:
-    name: Configure Container App
-    runs-on: ubuntu-latest
-    needs: [build-and-push, deploy-infrastructure]
-    environment: ${{ github.event.inputs.environment || 'staging' }}
-    permissions: {}
-
-    steps:
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Install Azure CLI extensions
-        run: |
-          az extension add --name containerapp --upgrade --yes
-
-      - name: Configure Ingress
-        run: |
-          # Enable external ingress on port 3000
-          az containerapp ingress enable \
-            --name ${{ needs.deploy-infrastructure.outputs.container_app_name }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --type external \
-            --target-port 3000 \
-            --transport auto \
-            --allow-insecure false
-
-      - name: Configure Scaling
-        run: |
-          # Set scaling rules: min 0 (scale to zero for cost savings), max 3
-          az containerapp update \
-            --name ${{ needs.deploy-infrastructure.outputs.container_app_name }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --min-replicas 0 \
-            --max-replicas 3
-
   verify-deployment:
     name: Verify Deployment
     runs-on: ubuntu-latest
-    needs: [deploy-infrastructure, configure-app]
+    needs: deploy
     environment: ${{ github.event.inputs.environment || 'staging' }}
     permissions: {}
 
     steps:
       - name: Check health endpoint
         run: |
-          APP_URL="${{ needs.deploy-infrastructure.outputs.app_url }}"
+          APP_URL="${{ needs.deploy.outputs.app_url }}"
           echo "Checking health at: $APP_URL/health"
           
           # Retry up to 10 times with 30 second intervals (5 minutes total)
@@ -229,7 +228,7 @@ jobs:
 
       - name: Check readiness endpoint
         run: |
-          APP_URL="${{ needs.deploy-infrastructure.outputs.app_url }}"
+          APP_URL="${{ needs.deploy.outputs.app_url }}"
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL/ready")
           echo "Readiness check: HTTP $HTTP_CODE"
           
@@ -245,7 +244,14 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Application URL | ${{ needs.deploy-infrastructure.outputs.app_url }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Application URL | ${{ needs.deploy.outputs.app_url }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Environment | ${{ github.event.inputs.environment || 'staging' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Image Tag | ${{ needs.build-and-push.outputs.image_tag }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Resource Group | ${{ env.AZURE_RESOURCE_GROUP }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Cost Information" >> $GITHUB_STEP_SUMMARY
+          echo "This deployment uses Azure Container Apps free tier:" >> $GITHUB_STEP_SUMMARY
+          echo "- App container: scale-to-zero enabled (0-3 replicas)" >> $GITHUB_STEP_SUMMARY
+          echo "- PostgreSQL container: 1 replica (always on for data persistence)" >> $GITHUB_STEP_SUMMARY
+          echo "- Free monthly quota: 180k vCPU-sec, 360k GiB-sec" >> $GITHUB_STEP_SUMMARY
+          echo "- ⚠️ Data is ephemeral - will be lost on postgres container restart" >> $GITHUB_STEP_SUMMARY

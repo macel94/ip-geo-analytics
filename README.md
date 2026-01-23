@@ -110,15 +110,13 @@ The root [Dockerfile](Dockerfile) builds client and server into a single image (
 
 ## Deployment (Azure Container Apps)
 
-This project uses **Azure Container Apps** with Docker Compose for a simple and cost-effective deployment.
+This project uses **Azure Container Apps** for the cheapest possible deployment. Both the app and PostgreSQL run as containers within the same Container Apps environment.
 
 ### Prerequisites
 
 1. An Azure subscription
-2. An Azure Database for PostgreSQL Flexible Server (or other PostgreSQL instance)
-3. GitHub repository secrets configured:
+2. GitHub repository secrets configured:
    - `AZURE_CREDENTIALS`: Azure Service Principal credentials (JSON)
-   - `DATABASE_URL`: PostgreSQL connection string
 
 ### Setup Azure Credentials
 
@@ -145,8 +143,8 @@ The deployment is fully automated via GitHub Actions:
 The workflow will:
 - Build and push the Docker image to GitHub Container Registry
 - Create Azure Container Apps environment (if not exists)
-- Deploy using `az containerapp compose create` with `docker-compose.azure.yml`
-- Configure ingress and scaling (0-3 replicas, scale to zero for cost savings)
+- Deploy PostgreSQL container (internal, always-on)
+- Deploy app container (external ingress, scale 0-3 replicas)
 - Verify deployment via health checks
 
 ### Files
@@ -156,7 +154,17 @@ The workflow will:
 
 ### Cost Optimization
 
-Azure Container Apps supports **scale to zero**, meaning you only pay when the app receives traffic. This is ideal for personal projects and low-traffic applications.
+Azure Container Apps is the **cheapest option** for this type of deployment:
+
+| Option | Cost | Notes |
+|--------|------|-------|
+| **Container Apps (current)** | **~$0/month** | Uses free tier (180k vCPU-sec, 360k GiB-sec/month) |
+| App Service Basic | ~$13/month | Always-on, no scale-to-zero |
+| Azure PostgreSQL Flexible | ~$15+/month | Managed DB, more expensive |
+
+- **App container**: Scale-to-zero enabled (0-3 replicas) - pay nothing when idle
+- **PostgreSQL container**: Always 1 replica to maintain connections
+- **⚠️ Note**: Data is ephemeral - will be lost on PostgreSQL container restart. For production, use Azure Database for PostgreSQL.
 
 ## Current ports
 
