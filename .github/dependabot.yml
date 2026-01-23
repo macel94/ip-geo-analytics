@@ -6,7 +6,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 1
     reviewers:
       - "macel94"
     labels:
@@ -16,24 +16,9 @@ updates:
       prefix: "chore"
       include: "scope"
     groups:
-      dev-dependencies:
-        patterns:
-          - "@playwright/*"
-          - "playwright"
-          - "concurrently"
-        update-types:
-          - "minor"
-          - "patch"
-      production-dependencies:
+      npm-dependencies:
         patterns:
           - "*"
-        exclude-patterns:
-          - "@playwright/*"
-          - "playwright"
-          - "concurrently"
-        update-types:
-          - "minor"
-          - "patch"
 
   # Server dependencies
   - package-ecosystem: "npm"
@@ -41,7 +26,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 1
     reviewers:
       - "macel94"
     labels:
@@ -52,26 +37,9 @@ updates:
       prefix: "chore"
       include: "scope"
     groups:
-      server-dev-dependencies:
-        patterns:
-          - "@types/*"
-          - "prisma"
-          - "ts-node*"
-          - "typescript"
-        update-types:
-          - "minor"
-          - "patch"
-      server-production-dependencies:
+      npm-dependencies:
         patterns:
           - "*"
-        exclude-patterns:
-          - "@types/*"
-          - "prisma"
-          - "ts-node*"
-          - "typescript"
-        update-types:
-          - "minor"
-          - "patch"
 
   # Client dependencies
   - package-ecosystem: "npm"
@@ -79,7 +47,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 1
     reviewers:
       - "macel94"
     labels:
@@ -90,26 +58,9 @@ updates:
       prefix: "chore"
       include: "scope"
     groups:
-      client-dev-dependencies:
-        patterns:
-          - "@types/*"
-          - "@vitejs/*"
-          - "typescript"
-          - "vite"
-        update-types:
-          - "minor"
-          - "patch"
-      client-production-dependencies:
+      npm-dependencies:
         patterns:
           - "*"
-        exclude-patterns:
-          - "@types/*"
-          - "@vitejs/*"
-          - "typescript"
-          - "vite"
-        update-types:
-          - "minor"
-          - "patch"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -117,7 +68,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 1
     reviewers:
       - "macel94"
     labels:
@@ -131,9 +82,6 @@ updates:
       github-actions:
         patterns:
           - "*"
-        update-types:
-          - "minor"
-          - "patch"
 
   # Docker
   - package-ecosystem: "docker"
@@ -141,7 +89,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 1
     reviewers:
       - "macel94"
     labels:
@@ -155,6 +103,3 @@ updates:
       docker:
         patterns:
           - "*"
-        update-types:
-          - "minor"
-          - "patch"
