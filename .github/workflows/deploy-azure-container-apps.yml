@@ -173,7 +173,7 @@ jobs:
             --name app \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
-            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }} \
             --registry-server ${{ env.REGISTRY }} \
             --registry-username ${{ github.actor }} \
             --registry-password ${{ secrets.GITHUB_TOKEN }} \
@@ -191,7 +191,7 @@ jobs:
           az containerapp update \
             --name app \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }} \
             --min-replicas 0 \
             --max-replicas 3
           
@@ -261,7 +261,7 @@ jobs:
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Application URL | ${{ needs.deploy.outputs.app_url }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Environment | ${{ github.event.inputs.environment || 'staging' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Image Tag | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image Tag | sha-${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Resource Group | ${{ env.AZURE_RESOURCE_GROUP }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Storage Account | ${{ env.AZURE_STORAGE_ACCOUNT }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
