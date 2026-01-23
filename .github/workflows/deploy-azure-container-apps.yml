@@ -173,7 +173,10 @@ jobs:
           
           # Create YAML config for PostgreSQL with volume mount and internal ingress
           # Using printf to write unindented YAML content to avoid GitHub Actions YAML parsing issues
+          # NOTE: The YAML must include 'type' and 'location' at root level for az containerapp create --yaml
           printf '%s\n' \
+            "type: Microsoft.App/containerApps" \
+            "location: ${{ env.AZURE_LOCATION }}" \
             "properties:" \
             "  managedEnvironmentId: /subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP }}/providers/Microsoft.App/managedEnvironments/${{ env.AZURE_CONTAINER_APP_ENV }}" \
             "  configuration:" \
