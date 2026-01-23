@@ -7,20 +7,23 @@ A lightweight visitor analytics platform designed for personal use and low-volum
 
 **Key Constraints:**
 -   **No Next.js**. Pure React (Vite) + Fastify (Node.js).
--   **Hosting**: Azure Container Apps (Dockerized).
+-   **Hosting**: Azure Container Apps (Dockerized, via Docker Compose).
 -   **Database**: PostgreSQL (via Prisma).
 -   **Privacy**: Technical demo only (no GDPR/Consent implementation required).
 
 ## 2. Tech Stack Verification
 -   **Backend**: Node.js, Fastify, Prisma ORM, `@maxmind/geoip2-node`.
 -   **Frontend**: React, Vite, Leaflet (`react-leaflet`), Chart.js.
--   **Infra**: Docker, Docker Compose (local), Azure Bicep (cloud).
+-   **Infra**: Docker, Docker Compose (local & Azure deployment).
 
 ## 3. High-Level Architecture
 -   **Monorepo**:
     -   `/server`: Backend API.
     -   `/client`: Frontend SPA.
-    -   `/deploy`: IaC and deployment scripts.
+-   **Deployment**:
+    -   `docker-compose.yml`: Local development with PostgreSQL.
+    -   `docker-compose.azure.yml`: Azure Container Apps production deployment.
+    -   `.github/workflows/deploy-azure-container-apps.yml`: CI/CD pipeline.
 -   **IP Handling**:
     -   Must use `trustProxy: true` in Fastify configuration to handle Azure Load Balancers.
     -   GeoIP lookups should use a Singleton pattern to avoid reloading the MMDB file on every request.

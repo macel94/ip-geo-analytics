@@ -108,10 +108,55 @@ See [`.github/workflows/e2e-tests.yml`](.github/workflows/e2e-tests.yml) for the
 
 The root [Dockerfile](Dockerfile) builds client and server into a single image (Node 24 Alpine). In prod the Fastify server serves the built SPA.
 
-## Deployment (Azure)
+## Deployment (Azure Container Apps)
 
-- Bicep template: [deploy/main.bicep](deploy/main.bicep)
-- Script: [deploy/deploy.sh](deploy/deploy.sh)
+This project uses **Azure Container Apps** with Docker Compose for a simple and cost-effective deployment.
+
+### Prerequisites
+
+1. An Azure subscription
+2. An Azure Database for PostgreSQL Flexible Server (or other PostgreSQL instance)
+3. GitHub repository secrets configured:
+   - `AZURE_CREDENTIALS`: Azure Service Principal credentials (JSON)
+   - `DATABASE_URL`: PostgreSQL connection string
+
+### Setup Azure Credentials
+
+Create a Service Principal and configure it as a GitHub secret:
+
+```bash
+# Create Service Principal
+az ad sp create-for-rbac \
+  --name "ip-geo-analytics-deploy" \
+  --role contributor \
+  --scopes /subscriptions/{subscription-id}/resourceGroups/{resource-group} \
+  --sdk-auth
+
+# Copy the JSON output to GitHub secret AZURE_CREDENTIALS
+```
+
+### Deploy
+
+The deployment is fully automated via GitHub Actions:
+
+1. **Automatic**: Push a tag (e.g., `v1.0.0`) to trigger deployment
+2. **Manual**: Go to Actions → "Deploy to Azure Container Apps" → Run workflow
+
+The workflow will:
+- Build and push the Docker image to GitHub Container Registry
+- Create Azure Container Apps environment (if not exists)
+- Deploy using `az containerapp compose create` with `docker-compose.azure.yml`
+- Configure ingress and scaling (0-3 replicas, scale to zero for cost savings)
+- Verify deployment via health checks
+
+### Files
+
+- [`docker-compose.azure.yml`](docker-compose.azure.yml) - Production compose file for Azure
+- [`.github/workflows/deploy-azure-container-apps.yml`](.github/workflows/deploy-azure-container-apps.yml) - CI/CD workflow
+
+### Cost Optimization
+
+Azure Container Apps supports **scale to zero**, meaning you only pay when the app receives traffic. This is ideal for personal projects and low-traffic applications.
 
 ## Current ports
 

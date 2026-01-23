@@ -11,7 +11,7 @@
 │  └──────────────┘  └──────────────┘  └──────────────┘          │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
 │  │  Dependabot  │  │   Deploy     │  │   CodeQL     │          │
-│  │              │  │   Azure/K8s  │  │              │          │
+│  │              │  │ Azure ACA    │  │              │          │
 │  └──────────────┘  └──────────────┘  └──────────────┘          │
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -21,40 +21,32 @@
 │              ghcr.io/macel94/ip-geo-analytics:latest            │
 └─────────────────────────────────────────────────────────────────┘
                               │
-              ┌───────────────┴───────────────┐
-              ▼                               ▼
-┌───────────────────────────┐   ┌───────────────────────────┐
-│   Azure Container Apps    │   │       Kubernetes          │
-│  ┌─────────────────────┐  │   │  ┌─────────────────────┐  │
-│  │  Container App      │  │   │  │   Deployment        │  │
-│  │  ┌───────────────┐  │  │   │  │  ┌───────────────┐  │  │
-│  │  │ Application   │  │  │   │  │  │ Pods (2-10)   │  │  │
-│  │  │ ┌──────────┐  │  │  │   │  │  │ ┌──────────┐  │  │  │
-│  │  │ │ /health  │  │  │  │   │  │  │ │ /health  │  │  │  │
-│  │  │ │ /ready   │  │  │  │   │  │  │ │ /ready   │  │  │  │
-│  │  │ │ /metrics │  │  │  │   │  │  │ │ /metrics │  │  │  │
-│  │  │ │ /api/*   │  │  │  │   │  │  │ │ /api/*   │  │  │  │
-│  │  │ └──────────┘  │  │  │   │  │  │ └──────────┘  │  │  │
-│  │  └───────────────┘  │  │   │  │  └───────────────┘  │  │
-│  │  Auto-scaling 1-5   │  │   │  │  HPA (2-10)         │  │
-│  └─────────────────────┘  │   │  └─────────────────────┘  │
-│                           │   │                           │
-│  ┌─────────────────────┐  │   │  ┌─────────────────────┐  │
-│  │ Log Analytics       │  │   │  │  Service + Ingress  │  │
-│  └─────────────────────┘  │   │  └─────────────────────┘  │
-│  ┌─────────────────────┐  │   └───────────────────────────┘
-│  │ App Insights        │  │
-│  └─────────────────────┘  │
-│  ┌─────────────────────┐  │
-│  │ Metric Alerts       │  │
-│  └─────────────────────┘  │
-└───────────────────────────┘
-              │
-              ▼
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Azure Container Apps                          │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  Container App Environment                                 │  │
+│  │  ┌─────────────────────────────────────────────────────┐  │  │
+│  │  │  Container App (scale to zero enabled)              │  │  │
+│  │  │  ┌───────────────────────────────────────────────┐  │  │  │
+│  │  │  │ Application                                   │  │  │  │
+│  │  │  │ ┌──────────┐ ┌──────────┐ ┌──────────┐       │  │  │  │
+│  │  │  │ │ /health  │ │ /ready   │ │ /metrics │       │  │  │  │
+│  │  │  │ └──────────┘ └──────────┘ └──────────┘       │  │  │  │
+│  │  │  │ ┌──────────┐ ┌──────────┐                    │  │  │  │
+│  │  │  │ │ /api/*   │ │ Static   │                    │  │  │  │
+│  │  │  │ └──────────┘ └──────────┘                    │  │  │  │
+│  │  │  └───────────────────────────────────────────────┘  │  │  │
+│  │  │  Auto-scaling: 0-3 replicas                         │  │  │
+│  │  └─────────────────────────────────────────────────────┘  │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      PostgreSQL Database                         │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  Azure PostgreSQL Flexible Server / K8s StatefulSet       │  │
+│  │  Azure PostgreSQL Flexible Server                         │  │
 │  │  ┌─────────┐  ┌─────────┐  ┌─────────┐                   │  │
 │  │  │ Visits  │  │ Backups │  │ Metrics │                   │  │
 │  │  └─────────┘  └─────────┘  └─────────┘                   │  │
@@ -204,10 +196,10 @@
 │     └─ Upload SARIF to Security            │
 │                                            │
 │  4. Deploy (manual or on tag)              │
-│     ├─ Deploy Bicep infrastructure         │
-│     ├─ Update Container App                │
-│     ├─ Verify health check                 │
-│     └─ Send notification                   │
+│     ├─ Create Azure Container Apps env     │
+│     ├─ Deploy via docker-compose           │
+│     ├─ Configure ingress & scaling         │
+│     └─ Verify health check                 │
 └────────────────────────────────────────────┘
 ```
 
@@ -270,69 +262,38 @@
 │  Layer 4: Runtime                           │
 │  ├─ Non-root containers                     │
 │  ├─ Read-only filesystem (where possible)   │
-│  ├─ Dropped capabilities                    │
-│  └─ Network policies (K8s)                  │
+│  └─ Dropped capabilities                    │
 └─────────────────────────────────────────────┘
 ```
 
-## Deployment Options
+## Deployment Architecture
 
-### Azure Container Apps
+### Azure Container Apps (with Docker Compose)
 ```
-┌──────────────────────────────────────┐
-│   Azure Resource Group               │
-│  ┌────────────────────────────────┐  │
-│  │  Container App Environment     │  │
-│  │  ┌──────────────────────────┐  │  │
-│  │  │  Container App           │  │  │
-│  │  │  - Min: 1 replica        │  │  │
-│  │  │  - Max: 5 replicas       │  │  │
-│  │  │  - Scale: 50 req/replica │  │  │
-│  │  └──────────────────────────┘  │  │
-│  └────────────────────────────────┘  │
-│  ┌────────────────────────────────┐  │
-│  │  PostgreSQL Flexible Server    │  │
-│  └────────────────────────────────┘  │
-│  ┌────────────────────────────────┐  │
-│  │  Log Analytics Workspace       │  │
-│  └────────────────────────────────┘  │
-│  ┌────────────────────────────────┐  │
-│  │  Application Insights          │  │
-│  └────────────────────────────────┘  │
-│  ┌────────────────────────────────┐  │
-│  │  Action Group + Alerts         │  │
-│  └────────────────────────────────┘  │
-└──────────────────────────────────────┘
-```
+┌──────────────────────────────────────────────────┐
+│   Azure Resource Group (rg-ip-geo-analytics)     │
+│  ┌────────────────────────────────────────────┐  │
+│  │  Container Apps Environment                │  │
+│  │  (ip-geo-analytics-env)                    │  │
+│  │  ┌──────────────────────────────────────┐  │  │
+│  │  │  Container App (app)                 │  │  │
+│  │  │  - Min: 0 replicas (scale to zero)   │  │  │
+│  │  │  - Max: 3 replicas                   │  │  │
+│  │  │  - Image: ghcr.io/macel94/           │  │  │
+│  │  │          ip-geo-analytics:latest     │  │  │
+│  │  │  - Health probes: /health, /ready    │  │  │
+│  │  └──────────────────────────────────────┘  │  │
+│  └────────────────────────────────────────────┘  │
+│                       │                          │
+│                       ▼                          │
+│  ┌────────────────────────────────────────────┐  │
+│  │  External PostgreSQL                       │  │
+│  │  (Azure Database for PostgreSQL or other)  │  │
+│  └────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────┘
 
-### Kubernetes
-```
-┌──────────────────────────────────────┐
-│   Namespace: visitor-analytics       │
-│  ┌────────────────────────────────┐  │
-│  │  Deployment                    │  │
-│  │  - Replicas: 2                 │  │
-│  │  - Health probes               │  │
-│  │  - Resource limits             │  │
-│  └────────────────────────────────┘  │
-│  ┌────────────────────────────────┐  │
-│  │  HorizontalPodAutoscaler       │  │
-│  │  - Min: 2, Max: 10             │  │
-│  │  - CPU: 70%, Memory: 80%       │  │
-│  └────────────────────────────────┘  │
-│  ┌────────────────────────────────┐  │
-│  │  Service (ClusterIP)           │  │
-│  └────────────────────────────────┘  │
-│  ┌────────────────────────────────┐  │
-│  │  Ingress (nginx)               │  │
-│  │  - TLS termination             │  │
-│  │  - cert-manager                │  │
-│  └────────────────────────────────┘  │
-│  ┌────────────────────────────────┐  │
-│  │  PostgreSQL StatefulSet        │  │
-│  │  - PVC: 10Gi                   │  │
-│  └────────────────────────────────┘  │
-└──────────────────────────────────────┘
+Deployment via: az containerapp compose create
+Config file: docker-compose.azure.yml
 ```
 
 ## Key Components Summary
@@ -345,8 +306,7 @@
 | Tracking API | Record visitor data | `/api/track` |
 | Stats API | Retrieve analytics | `/api/stats` |
 | CI/CD | Automated testing & deployment | `.github/workflows/` |
-| IaC (Azure) | Infrastructure provisioning | `deploy/main.bicep` |
-| IaC (K8s) | Kubernetes deployment | `k8s/*.yaml` |
+| Deployment | Azure Container Apps | `docker-compose.azure.yml` |
 | Automation | Operational scripts | `scripts/automation/` |
 | Documentation | SRE guides | `docs/` |
 
@@ -367,14 +327,11 @@
 **Infrastructure:**
 - Docker (containerization)
 - Azure Container Apps (cloud deployment)
-- Kubernetes (alternative deployment)
 - GitHub Actions (CI/CD)
 
 **Monitoring:**
 - Prometheus metrics format
-- Azure Application Insights
 - Custom health checks
-- Log Analytics
 
 **Security:**
 - Trivy (container scanning)

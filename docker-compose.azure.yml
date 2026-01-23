@@ -1,0 +1,23 @@
+# Docker Compose file for Azure Container Apps deployment
+# This file is used with `az containerapp compose create` command
+#
+# Note: Azure Container Apps manages the PostgreSQL database separately
+# via Azure Database for PostgreSQL Flexible Server for production use.
+# This compose file is designed for deploying the application container
+# with an external database connection.
+
+services:
+  app:
+    image: ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG:-latest}
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=${DATABASE_URL}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

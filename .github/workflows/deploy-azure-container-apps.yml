@@ -1,0 +1,248 @@
+name: Deploy to Azure Container Apps
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+  push:
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  AZURE_RESOURCE_GROUP: rg-ip-geo-analytics
+  AZURE_LOCATION: eastus
+  AZURE_CONTAINER_APP_ENV: ip-geo-analytics-env
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+      full_image: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    
+    outputs:
+      container_app_name: ${{ steps.deploy.outputs.container_app_name }}
+      app_url: ${{ steps.deploy.outputs.app_url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install Azure CLI extensions
+        run: |
+          az extension add --name containerapp --upgrade --yes
+          az extension add --name containerapp-compose --upgrade --yes
+
+      - name: Create Resource Group
+        run: |
+          az group create \
+            --name ${{ env.AZURE_RESOURCE_GROUP }} \
+            --location ${{ env.AZURE_LOCATION }} \
+            --output none || true
+
+      - name: Create Container Apps Environment
+        run: |
+          # Check if environment exists
+          ENV_EXISTS=$(az containerapp env show \
+            --name ${{ env.AZURE_CONTAINER_APP_ENV }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --query "name" -o tsv 2>/dev/null || echo "")
+          
+          if [ -z "$ENV_EXISTS" ]; then
+            echo "Creating Container Apps Environment..."
+            az containerapp env create \
+              --name ${{ env.AZURE_CONTAINER_APP_ENV }} \
+              --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+              --location ${{ env.AZURE_LOCATION }}
+          else
+            echo "Container Apps Environment already exists"
+          fi
+
+      - name: Deploy using Docker Compose
+        id: deploy
+        run: |
+          # Set environment variables for docker-compose
+          export REGISTRY="${{ env.REGISTRY }}"
+          export IMAGE_NAME="${{ env.IMAGE_NAME }}"
+          export IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+          export DATABASE_URL="${{ secrets.DATABASE_URL }}"
+          
+          # Deploy using az containerapp compose create
+          # This will create/update the container app based on docker-compose.azure.yml
+          az containerapp compose create \
+            --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --compose-file-path ./docker-compose.azure.yml \
+            --registry-server ${{ env.REGISTRY }} \
+            --registry-username ${{ github.actor }} \
+            --registry-password ${{ secrets.GITHUB_TOKEN }} \
+            --env-vars \
+              "NODE_ENV=production" \
+              "PORT=3000" \
+              "DATABASE_URL=${{ secrets.DATABASE_URL }}"
+          
+          # Get the container app name (derived from service name in compose file)
+          CONTAINER_APP_NAME="app"
+          echo "container_app_name=$CONTAINER_APP_NAME" >> $GITHUB_OUTPUT
+          
+          # Get the app URL
+          APP_URL=$(az containerapp show \
+            --name $CONTAINER_APP_NAME \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --query "properties.configuration.ingress.fqdn" -o tsv)
+          echo "app_url=https://$APP_URL" >> $GITHUB_OUTPUT
+          echo "Application URL: https://$APP_URL"
+
+  configure-app:
+    name: Configure Container App
+    runs-on: ubuntu-latest
+    needs: [build-and-push, deploy-infrastructure]
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install Azure CLI extensions
+        run: |
+          az extension add --name containerapp --upgrade --yes
+
+      - name: Configure Ingress
+        run: |
+          # Enable external ingress on port 3000
+          az containerapp ingress enable \
+            --name ${{ needs.deploy-infrastructure.outputs.container_app_name }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --type external \
+            --target-port 3000 \
+            --transport auto \
+            --allow-insecure false
+
+      - name: Configure Scaling
+        run: |
+          # Set scaling rules: min 0 (scale to zero for cost savings), max 3
+          az containerapp update \
+            --name ${{ needs.deploy-infrastructure.outputs.container_app_name }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --min-replicas 0 \
+            --max-replicas 3
+
+  verify-deployment:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    needs: [deploy-infrastructure, configure-app]
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+
+    steps:
+      - name: Wait for app to be ready
+        run: sleep 60
+
+      - name: Check health endpoint
+        run: |
+          APP_URL="${{ needs.deploy-infrastructure.outputs.app_url }}"
+          echo "Checking health at: $APP_URL/health"
+          
+          # Retry up to 5 times with 30 second intervals
+          for i in {1..5}; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL/health" || echo "000")
+            echo "Attempt $i: HTTP $HTTP_CODE"
+            
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Health check passed!"
+              exit 0
+            fi
+            
+            if [ $i -lt 5 ]; then
+              echo "Waiting 30 seconds before retry..."
+              sleep 30
+            fi
+          done
+          
+          echo "❌ Health check failed after 5 attempts"
+          exit 1
+
+      - name: Check readiness endpoint
+        run: |
+          APP_URL="${{ needs.deploy-infrastructure.outputs.app_url }}"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL/ready")
+          echo "Readiness check: HTTP $HTTP_CODE"
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "⚠️ Readiness check returned non-200 status"
+          fi
+
+      - name: Deployment Summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Deployment Successful!**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Application URL | ${{ needs.deploy-infrastructure.outputs.app_url }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ github.event.inputs.environment || 'staging' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image Tag | ${{ needs.build-and-push.outputs.image_tag }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource Group | ${{ env.AZURE_RESOURCE_GROUP }} |" >> $GITHUB_STEP_SUMMARY
