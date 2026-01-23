@@ -115,6 +115,7 @@ jobs:
             --location ${{ env.AZURE_LOCATION }} \
             --sku Standard_LRS \
             --kind StorageV2 \
+            --enable-large-file-share \
             --output none 2>/dev/null || echo "Storage account already exists"
           
           # Get storage account key
@@ -130,7 +131,7 @@ jobs:
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --storage-account ${{ env.AZURE_STORAGE_ACCOUNT }} \
             --name ${{ env.AZURE_STORAGE_SHARE }} \
-            --quota 1 \
+            --quota 1024 \
             --enabled-protocols SMB \
             --output none 2>/dev/null || echo "File share already exists"
 
