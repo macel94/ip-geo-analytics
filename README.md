@@ -23,8 +23,8 @@ This project includes comprehensive SRE automation:
 
 - 🚀 **CI/CD**: GitHub Actions for testing, building, security scanning, and deployment
 - 🔒 **Security**: Automated vulnerability scanning, Dependabot, secret detection
-- 📊 **Monitoring**: Health checks, Prometheus metrics, Application Insights
-- 🏗️ **IaC**: Azure Bicep templates and Kubernetes manifests
+- 📊 **Monitoring**: Health checks, Prometheus metrics
+- 🏗️ **Deployment**: Docker Compose-based Azure Container Apps deployment
 - 🔧 **Automation**: Database backups, health monitoring, load testing scripts
 
 **Documentation**:
@@ -34,7 +34,7 @@ This project includes comprehensive SRE automation:
 
 **Key Endpoints**:
 - `/health` - Health check with database connectivity
-- `/ready` - Readiness probe for Kubernetes/Container Apps
+- `/ready` - Readiness probe for Container Apps
 - `/metrics` - Prometheus-compatible metrics
 
 ## Environment
