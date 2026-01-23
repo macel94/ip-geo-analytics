@@ -45,7 +45,7 @@ jobs:
             --location ${{ env.AZURE_LOCATION }}
 
       - name: Deploy Bicep Template
-        uses: azure/arm-deploy@v1
+        uses: azure/arm-deploy@v2
         with:
           resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP }}
           template: ./deploy/main.bicep
