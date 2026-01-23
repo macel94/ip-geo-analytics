@@ -145,14 +145,14 @@ The workflow will:
 - Create Azure Storage Account and File Share for persistent data
 - Create Azure Container Apps environment (if not exists)
 - Mount storage to Container Apps environment
-- Deploy PostgreSQL container with persistent volume (internal, always-on)
+- Deploy PostgreSQL container with internal ingress and persistent volume
 - Deploy app container (external ingress, scale 0-3 replicas)
 - Verify deployment via health checks
 
 ### Files
 
-- [`docker-compose.azure.yml`](docker-compose.azure.yml) - Production compose file for Azure
-- [`.github/workflows/deploy-azure-container-apps.yml`](.github/workflows/deploy-azure-container-apps.yml) - CI/CD workflow
+- [`docker-compose.azure.yml`](docker-compose.azure.yml) - Reference documentation showing container configuration (not used directly by workflow)
+- [`.github/workflows/deploy-azure-container-apps.yml`](.github/workflows/deploy-azure-container-apps.yml) - CI/CD workflow using `az containerapp create`
 
 ### Infrastructure
 

@@ -268,10 +268,16 @@
 
 ## Deployment Architecture
 
-### Azure Container Apps (with Docker Compose)
+### Azure Container Apps (Individual Container Deployment)
 ```
 ┌──────────────────────────────────────────────────┐
 │   Azure Resource Group (rg-ip-geo-analytics)     │
+│  ┌────────────────────────────────────────────┐  │
+│  │  Azure Storage Account                     │  │
+│  │  └─ Azure Files Share (pgdata)             │  │
+│  └────────────────────────────────────────────┘  │
+│                       │                          │
+│                       ▼                          │
 │  ┌────────────────────────────────────────────┐  │
 │  │  Container Apps Environment                │  │
 │  │  (ip-geo-analytics-env)                    │  │
@@ -282,18 +288,22 @@
 │  │  │  - Image: ghcr.io/macel94/           │  │  │
 │  │  │          ip-geo-analytics:latest     │  │  │
 │  │  │  - Health probes: /health, /ready    │  │  │
+│  │  │  - External ingress (HTTPS)          │  │  │
 │  │  └──────────────────────────────────────┘  │  │
-│  └────────────────────────────────────────────┘  │
-│                       │                          │
-│                       ▼                          │
-│  ┌────────────────────────────────────────────┐  │
-│  │  External PostgreSQL                       │  │
-│  │  (Azure Database for PostgreSQL or other)  │  │
+│  │                    │                       │  │
+│  │                    ▼                       │  │
+│  │  ┌──────────────────────────────────────┐  │  │
+│  │  │  Container App (postgres)            │  │  │
+│  │  │  - 1 replica (always on)             │  │  │
+│  │  │  - Image: postgres:15-alpine         │  │  │
+│  │  │  - Internal ingress (TCP)            │  │  │
+│  │  │  - Azure Files volume mounted        │  │  │
+│  │  └──────────────────────────────────────┘  │  │
 │  └────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────┘
 
-Deployment via: az containerapp compose create
-Config file: docker-compose.azure.yml
+Deployment via: az containerapp create (individual containers)
+Config file: docker-compose.azure.yml (reference documentation)
 ```
 
 ## Key Components Summary
