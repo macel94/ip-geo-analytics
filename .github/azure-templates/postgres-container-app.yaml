@@ -1,0 +1,34 @@
+properties:
+  managedEnvironmentId: /subscriptions/SUBSCRIPTION_ID_PLACEHOLDER/resourceGroups/AZURE_RESOURCE_GROUP_PLACEHOLDER/providers/Microsoft.App/managedEnvironments/AZURE_CONTAINER_APP_ENV_PLACEHOLDER
+  configuration:
+    activeRevisionsMode: Single
+    ingress:
+      external: false
+      targetPort: 5432
+      transport: tcp
+  template:
+    containers:
+      - image: postgres:15-alpine
+        name: postgres
+        env:
+          - name: POSTGRES_USER
+            value: admin
+          - name: POSTGRES_PASSWORD
+            value: analytics123
+          - name: POSTGRES_DB
+            value: analytics
+          - name: PGDATA
+            value: /var/lib/postgresql/data/pgdata
+        resources:
+          cpu: 0.25
+          memory: 0.5Gi
+        volumeMounts:
+          - mountPath: /var/lib/postgresql/data
+            volumeName: pgdatavolume
+    volumes:
+      - name: pgdatavolume
+        storageType: AzureFile
+        storageName: AZURE_STORAGE_MOUNT_NAME_PLACEHOLDER
+    scale:
+      minReplicas: 0
+      maxReplicas: 1
