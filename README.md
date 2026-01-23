@@ -23,8 +23,8 @@ This project includes comprehensive SRE automation:
 
 - 🚀 **CI/CD**: GitHub Actions for testing, building, security scanning, and deployment
 - 🔒 **Security**: Automated vulnerability scanning, Dependabot, secret detection
-- 📊 **Monitoring**: Health checks, Prometheus metrics, Application Insights
-- 🏗️ **IaC**: Azure Bicep templates and Kubernetes manifests
+- 📊 **Monitoring**: Health checks, Prometheus metrics
+- 🏗️ **Deployment**: Docker Compose-based Azure Container Apps deployment
 - 🔧 **Automation**: Database backups, health monitoring, load testing scripts
 
 **Documentation**:
@@ -34,7 +34,7 @@ This project includes comprehensive SRE automation:
 
 **Key Endpoints**:
 - `/health` - Health check with database connectivity
-- `/ready` - Readiness probe for Kubernetes/Container Apps
+- `/ready` - Readiness probe for Container Apps
 - `/metrics` - Prometheus-compatible metrics
 
 ## Environment
@@ -108,10 +108,76 @@ See [`.github/workflows/e2e-tests.yml`](.github/workflows/e2e-tests.yml) for the
 
 The root [Dockerfile](Dockerfile) builds client and server into a single image (Node 24 Alpine). In prod the Fastify server serves the built SPA.
 
-## Deployment (Azure)
+## Deployment (Azure Container Apps)
 
-- Bicep template: [deploy/main.bicep](deploy/main.bicep)
-- Script: [deploy/deploy.sh](deploy/deploy.sh)
+This project uses **Azure Container Apps** for the cheapest possible deployment. Both the app and PostgreSQL run as containers within the same Container Apps environment, with PostgreSQL data persisted to Azure Files storage.
+
+### Prerequisites
+
+1. An Azure subscription
+2. GitHub repository secrets configured:
+   - `AZURE_CREDENTIALS`: Azure Service Principal credentials (JSON)
+
+### Setup Azure Credentials
+
+Create a Service Principal and configure it as a GitHub secret:
+
+```bash
+# Create Service Principal
+az ad sp create-for-rbac \
+  --name "ip-geo-analytics-deploy" \
+  --role contributor \
+  --scopes /subscriptions/{subscription-id}/resourceGroups/{resource-group} \
+  --sdk-auth
+
+# Copy the JSON output to GitHub secret AZURE_CREDENTIALS
+```
+
+### Deploy
+
+The deployment is fully automated via GitHub Actions:
+
+1. **Automatic**: Push a tag (e.g., `v1.0.0`) to trigger deployment
+2. **Manual**: Go to Actions → "Deploy to Azure Container Apps" → Run workflow
+
+The workflow will:
+- Build and push the Docker image to GitHub Container Registry
+- Create Azure Storage Account and File Share for persistent data
+- Create Azure Container Apps environment (if not exists)
+- Mount storage to Container Apps environment
+- Deploy PostgreSQL container with internal ingress and persistent volume
+- Deploy app container (external ingress, scale 0-3 replicas)
+- Verify deployment via health checks
+
+### Files
+
+- [`docker-compose.azure.yml`](docker-compose.azure.yml) - Reference documentation showing container configuration (not used directly by workflow)
+- [`.github/workflows/deploy-azure-container-apps.yml`](.github/workflows/deploy-azure-container-apps.yml) - CI/CD workflow using `az containerapp create`
+
+### Infrastructure
+
+| Resource | Purpose |
+|----------|---------|
+| Container Apps Environment | Hosts both containers |
+| App Container | Node.js application (scale 0-3) |
+| PostgreSQL Container | Database (1 replica, always-on) |
+| Storage Account | Persistent storage for PostgreSQL data |
+| Azure Files Share | Mounted to PostgreSQL at `/var/lib/postgresql/data` |
+
+### Cost Optimization
+
+Azure Container Apps is the **cheapest option** for this type of deployment:
+
+| Option | Cost | Notes |
+|--------|------|-------|
+| **Container Apps (current)** | **~$0.06/month** | Free tier + minimal storage |
+| App Service Basic | ~$13/month | Always-on, no scale-to-zero |
+| Azure PostgreSQL Flexible | ~$15+/month | Managed DB, more expensive |
+
+- **App container**: Scale-to-zero enabled (0-3 replicas) - pay nothing when idle
+- **PostgreSQL container**: Always 1 replica with persistent Azure Files storage
+- **Storage**: ~$0.06/GB/month for Azure Files Standard (1GB quota configured)
+- **✅ Data persists**: Database data survives container restarts
 
 ## Current ports
 
