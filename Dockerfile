@@ -1,5 +1,5 @@
 # Stage 1: Build Client (Vite)
-FROM node:24-alpine AS client-builder
+FROM node:25-alpine AS client-builder
 WORKDIR /app
 # Copy workspace root and all package files
 COPY package*.json ./
@@ -11,7 +11,7 @@ RUN npm install
 RUN npm run build --workspace=client
 
 # Stage 2: Build Server (TypeScript)
-FROM node:24-alpine AS server-builder
+FROM node:25-alpine AS server-builder
 WORKDIR /app
 # Copy workspace root and all package files
 COPY package*.json ./
@@ -25,7 +25,7 @@ RUN cd server && npx prisma generate
 RUN npm run build --workspace=server
 
 # Stage 3: Production Runtime
-FROM node:24-alpine
+FROM node:25-alpine
 WORKDIR /app
 
 # Copy workspace structure with package files
