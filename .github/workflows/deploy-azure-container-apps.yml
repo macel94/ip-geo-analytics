@@ -172,7 +172,8 @@ jobs:
           SUBSCRIPTION_ID=$(az account show --query id -o tsv)
           
           # Create YAML config for PostgreSQL with volume mount and internal ingress
-          cat > /tmp/postgres-app.yaml << 'EOF'
+          # Note: Using sed to strip leading whitespace from heredoc content
+          cat > /tmp/postgres-app.yaml << 'EOFYAML'
           properties:
             managedEnvironmentId: /subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP }}/providers/Microsoft.App/managedEnvironments/${{ env.AZURE_CONTAINER_APP_ENV }}
             configuration:
@@ -207,7 +208,9 @@ jobs:
               scale:
                 minReplicas: 0
                 maxReplicas: 1
-          EOF
+          EOFYAML
+          # Strip the leading 10 spaces from each line to produce valid YAML
+          sed -i 's/^          //' /tmp/postgres-app.yaml
           
           # Replace subscription ID placeholder
           sed -i "s|\${SUBSCRIPTION_ID}|$SUBSCRIPTION_ID|g" /tmp/postgres-app.yaml
