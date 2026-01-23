@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^10.0.0",
-    "@fastify/static": "^8.0.0",
+    "@fastify/static": "^9.0.0",
     "@maxmind/geoip2-node": "^5.0.0",
     "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "^7.0.0",
