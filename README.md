@@ -110,7 +110,7 @@ The root [Dockerfile](Dockerfile) builds client and server into a single image (
 
 ## Deployment (Azure Container Apps)
 
-This project uses **Azure Container Apps** for the cheapest possible deployment. Both the app and PostgreSQL run as containers within the same Container Apps environment.
+This project uses **Azure Container Apps** for the cheapest possible deployment. Both the app and PostgreSQL run as containers within the same Container Apps environment, with PostgreSQL data persisted to Azure Files storage.
 
 ### Prerequisites
 
@@ -142,8 +142,10 @@ The deployment is fully automated via GitHub Actions:
 
 The workflow will:
 - Build and push the Docker image to GitHub Container Registry
+- Create Azure Storage Account and File Share for persistent data
 - Create Azure Container Apps environment (if not exists)
-- Deploy PostgreSQL container (internal, always-on)
+- Mount storage to Container Apps environment
+- Deploy PostgreSQL container with persistent volume (internal, always-on)
 - Deploy app container (external ingress, scale 0-3 replicas)
 - Verify deployment via health checks
 
@@ -152,19 +154,30 @@ The workflow will:
 - [`docker-compose.azure.yml`](docker-compose.azure.yml) - Production compose file for Azure
 - [`.github/workflows/deploy-azure-container-apps.yml`](.github/workflows/deploy-azure-container-apps.yml) - CI/CD workflow
 
+### Infrastructure
+
+| Resource | Purpose |
+|----------|---------|
+| Container Apps Environment | Hosts both containers |
+| App Container | Node.js application (scale 0-3) |
+| PostgreSQL Container | Database (1 replica, always-on) |
+| Storage Account | Persistent storage for PostgreSQL data |
+| Azure Files Share | Mounted to PostgreSQL at `/var/lib/postgresql/data` |
+
 ### Cost Optimization
 
 Azure Container Apps is the **cheapest option** for this type of deployment:
 
 | Option | Cost | Notes |
 |--------|------|-------|
-| **Container Apps (current)** | **~$0/month** | Uses free tier (180k vCPU-sec, 360k GiB-sec/month) |
+| **Container Apps (current)** | **~$0.06/month** | Free tier + minimal storage |
 | App Service Basic | ~$13/month | Always-on, no scale-to-zero |
 | Azure PostgreSQL Flexible | ~$15+/month | Managed DB, more expensive |
 
 - **App container**: Scale-to-zero enabled (0-3 replicas) - pay nothing when idle
-- **PostgreSQL container**: Always 1 replica to maintain connections
-- **⚠️ Note**: Data is ephemeral - will be lost on PostgreSQL container restart. For production, use Azure Database for PostgreSQL.
+- **PostgreSQL container**: Always 1 replica with persistent Azure Files storage
+- **Storage**: ~$0.06/GB/month for Azure Files Standard (1GB quota configured)
+- **✅ Data persists**: Database data survives container restarts
 
 ## Current ports
 

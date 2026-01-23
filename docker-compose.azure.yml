@@ -1,10 +1,11 @@
 # Docker Compose file for Azure Container Apps deployment
-# This file is used with `az containerapp compose create` command
+# Note: This file is for reference/local development only.
+# The actual Azure deployment uses az containerapp CLI commands with YAML configs
+# to properly mount Azure Files storage for PostgreSQL data persistence.
 #
 # Cost optimized for test/demo: Uses Container Apps free tier with scale-to-zero.
 # Both containers share the free monthly quota (180k vCPU-sec, 360k GiB-sec).
-# Note: PostgreSQL data uses ephemeral storage - data persists while container runs
-# but will be lost on container restart. For production, use Azure Database for PostgreSQL.
+# PostgreSQL data is persisted to Azure Files storage mounted at /var/lib/postgresql/data.
 
 services:
   postgres:
@@ -13,6 +14,9 @@ services:
       - POSTGRES_USER=admin
       - POSTGRES_PASSWORD=analytics123
       - POSTGRES_DB=analytics
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - pgdata:/var/lib/postgresql/data
 
   app:
     image: ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG:-latest}
@@ -24,3 +28,6 @@ services:
       - DATABASE_URL=postgresql://admin:analytics123@postgres:5432/analytics?schema=public
     depends_on:
       - postgres
+
+volumes:
+  pgdata:
