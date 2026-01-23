@@ -172,45 +172,47 @@ jobs:
           SUBSCRIPTION_ID=$(az account show --query id -o tsv)
           
           # Create YAML config for PostgreSQL with volume mount and internal ingress
-          cat > /tmp/postgres-app.yaml << 'EOF'
-          properties:
-            managedEnvironmentId: /subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP }}/providers/Microsoft.App/managedEnvironments/${{ env.AZURE_CONTAINER_APP_ENV }}
-            configuration:
-              activeRevisionsMode: Single
-              ingress:
-                external: false
-                targetPort: 5432
-                transport: tcp
-            template:
-              containers:
-                - image: postgres:15-alpine
-                  name: postgres
-                  env:
-                    - name: POSTGRES_USER
-                      value: admin
-                    - name: POSTGRES_PASSWORD
-                      value: analytics123
-                    - name: POSTGRES_DB
-                      value: analytics
-                    - name: PGDATA
-                      value: /var/lib/postgresql/data/pgdata
-                  resources:
-                    cpu: 0.25
-                    memory: 0.5Gi
-                  volumeMounts:
-                    - mountPath: /var/lib/postgresql/data
-                      volumeName: pgdatavolume
-              volumes:
-                - name: pgdatavolume
-                  storageType: AzureFile
-                  storageName: ${{ env.AZURE_STORAGE_MOUNT_NAME }}
-              scale:
-                minReplicas: 0
-                maxReplicas: 1
-          EOF
+          # Using printf to write unindented YAML content to avoid GitHub Actions YAML parsing issues
+          printf '%s\n' \
+            "properties:" \
+            "  managedEnvironmentId: /subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP }}/providers/Microsoft.App/managedEnvironments/${{ env.AZURE_CONTAINER_APP_ENV }}" \
+            "  configuration:" \
+            "    activeRevisionsMode: Single" \
+            "    ingress:" \
+            "      external: false" \
+            "      targetPort: 5432" \
+            "      transport: tcp" \
+            "  template:" \
+            "    containers:" \
+            "      - image: postgres:15-alpine" \
+            "        name: postgres" \
+            "        env:" \
+            "          - name: POSTGRES_USER" \
+            "            value: admin" \
+            "          - name: POSTGRES_PASSWORD" \
+            "            value: analytics123" \
+            "          - name: POSTGRES_DB" \
+            "            value: analytics" \
+            "          - name: PGDATA" \
+            "            value: /var/lib/postgresql/data/pgdata" \
+            "        resources:" \
+            "          cpu: 0.25" \
+            "          memory: 0.5Gi" \
+            "        volumeMounts:" \
+            "          - mountPath: /var/lib/postgresql/data" \
+            "            volumeName: pgdatavolume" \
+            "    volumes:" \
+            "      - name: pgdatavolume" \
+            "        storageType: AzureFile" \
+            "        storageName: ${{ env.AZURE_STORAGE_MOUNT_NAME }}" \
+            "    scale:" \
+            "      minReplicas: 0" \
+            "      maxReplicas: 1" \
+            > /tmp/postgres-app.yaml
           
-          # Replace subscription ID placeholder
-          sed -i "s|\${SUBSCRIPTION_ID}|$SUBSCRIPTION_ID|g" /tmp/postgres-app.yaml
+          # Debug: show generated YAML
+          echo "Generated YAML:"
+          cat /tmp/postgres-app.yaml
           
           # Check if postgres app exists
           POSTGRES_EXISTS=$(az containerapp show \
@@ -239,12 +241,12 @@ jobs:
       - name: Deploy Application Container
         id: deploy
         run: |
-          # Get the internal FQDN for postgres container
-          POSTGRES_FQDN=$(az containerapp show \
-            --name postgres \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --query "properties.configuration.ingress.fqdn" -o tsv)
-          echo "PostgreSQL FQDN: $POSTGRES_FQDN"
+          # In Azure Container Apps, apps within the same environment can communicate
+          # using the container app name directly. For internal TCP ingress, we use
+          # the simple name 'postgres' instead of querying the FQDN.
+          # See: https://learn.microsoft.com/en-us/azure/container-apps/connect-apps
+          POSTGRES_HOST="postgres"
+          echo "PostgreSQL internal hostname: $POSTGRES_HOST"
           
           # Deploy the application container
           az containerapp create \
@@ -264,7 +266,7 @@ jobs:
             --env-vars \
               "NODE_ENV=production" \
               "PORT=3000" \
-              "DATABASE_URL=postgresql://admin:analytics123@${POSTGRES_FQDN}:5432/analytics?schema=public" \
+              "DATABASE_URL=postgresql://admin:analytics123@${POSTGRES_HOST}:5432/analytics?schema=public" \
             || \
           az containerapp update \
             --name app \
