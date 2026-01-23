@@ -172,43 +172,43 @@ jobs:
           SUBSCRIPTION_ID=$(az account show --query id -o tsv)
           
           # Create YAML config for PostgreSQL with volume mount and internal ingress
-          # Using printf to write unindented YAML content to avoid GitHub Actions YAML parsing issues
-          printf '%s\n' \
-            "properties:" \
-            "  managedEnvironmentId: /subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP }}/providers/Microsoft.App/managedEnvironments/${{ env.AZURE_CONTAINER_APP_ENV }}" \
-            "  configuration:" \
-            "    activeRevisionsMode: Single" \
-            "    ingress:" \
-            "      external: false" \
-            "      targetPort: 5432" \
-            "      transport: tcp" \
-            "  template:" \
-            "    containers:" \
-            "      - image: postgres:15-alpine" \
-            "        name: postgres" \
-            "        env:" \
-            "          - name: POSTGRES_USER" \
-            "            value: admin" \
-            "          - name: POSTGRES_PASSWORD" \
-            "            value: analytics123" \
-            "          - name: POSTGRES_DB" \
-            "            value: analytics" \
-            "          - name: PGDATA" \
-            "            value: /var/lib/postgresql/data/pgdata" \
-            "        resources:" \
-            "          cpu: 0.25" \
-            "          memory: 0.5Gi" \
-            "        volumeMounts:" \
-            "          - mountPath: /var/lib/postgresql/data" \
-            "            volumeName: pgdatavolume" \
-            "    volumes:" \
-            "      - name: pgdatavolume" \
-            "        storageType: AzureFile" \
-            "        storageName: ${{ env.AZURE_STORAGE_MOUNT_NAME }}" \
-            "    scale:" \
-            "      minReplicas: 0" \
-            "      maxReplicas: 1" \
-            > /tmp/postgres-app.yaml
+          # Using cat with heredoc to ensure proper YAML formatting including booleans
+          cat > /tmp/postgres-app.yaml <<EOF
+properties:
+  managedEnvironmentId: /subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP }}/providers/Microsoft.App/managedEnvironments/${{ env.AZURE_CONTAINER_APP_ENV }}
+  configuration:
+    activeRevisionsMode: Single
+    ingress:
+      external: false
+      targetPort: 5432
+      transport: tcp
+  template:
+    containers:
+      - image: postgres:15-alpine
+        name: postgres
+        env:
+          - name: POSTGRES_USER
+            value: admin
+          - name: POSTGRES_PASSWORD
+            value: analytics123
+          - name: POSTGRES_DB
+            value: analytics
+          - name: PGDATA
+            value: /var/lib/postgresql/data/pgdata
+        resources:
+          cpu: 0.25
+          memory: 0.5Gi
+        volumeMounts:
+          - mountPath: /var/lib/postgresql/data
+            volumeName: pgdatavolume
+    volumes:
+      - name: pgdatavolume
+        storageType: AzureFile
+        storageName: ${{ env.AZURE_STORAGE_MOUNT_NAME }}
+    scale:
+      minReplicas: 0
+      maxReplicas: 1
+EOF
           
           # Debug: show generated YAML
           echo "Generated YAML:"
