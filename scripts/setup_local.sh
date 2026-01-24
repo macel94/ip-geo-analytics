@@ -40,6 +40,7 @@ fi
 echo -e "${GREEN}7. Running Database Migrations...${NC}"
 cd server
 npx prisma db push --config prisma/prisma.config.ts
+npx prisma generate --config prisma/prisma.config.ts
 cd ..
 
 echo -e "${GREEN}✅ Setup Complete! Run 'npm run dev' or './scripts/start_dev.sh' to start.${NC}"

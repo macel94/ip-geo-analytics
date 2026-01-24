@@ -9,6 +9,11 @@ echo "Starting Client (Vite) and Server (Fastify)..."
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR/.."
 
+# Ensure Prisma Client is generated (workspaces can skip this during install)
+cd server
+npx prisma generate --config prisma/prisma.config.ts
+cd ..
+
 npx concurrently \
     -n "SERVER,CLIENT" \
     -c "blue,magenta" \
