@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "9570251635383426822"
+      "templateHash": "4524423174553251869"
     }
   },
   "parameters": {
@@ -56,9 +56,9 @@
     }
   },
   "variables": {
-    "storageAccountName": "ipgeoanalyticssa",
+    "storageAccountName": "[format('ipgeoanalytics{0}sa', parameters('environment'))]",
     "storageShareName": "pgdata",
-    "containerAppEnvName": "ip-geo-analytics-env",
+    "containerAppEnvName": "[format('ip-geo-analytics-{0}-env', parameters('environment'))]",
     "storageMountName": "pgdatavolume"
   },
   "resources": [

@@ -6,14 +6,16 @@ This directory contains Bicep templates for deploying the IP Geo Analytics appli
 
 The deployment creates the following resources:
 
-1. **Storage Account** (`ipgeoanalyticssa`)
+1. **Storage Account** (`ipgeoanalytics{environment}sa`)
    - Azure Files share for PostgreSQL data persistence
    - Standard LRS (locally redundant storage)
    - 1TB quota
+   - Environment-specific naming (e.g., `ipgeoanalyticsstagingsa`, `ipgeoanalyticsproductionsa`)
 
-2. **Container Apps Environment** (`ip-geo-analytics-env`)
+2. **Container Apps Environment** (`ip-geo-analytics-{environment}-env`)
    - Hosts both PostgreSQL and application containers
    - Configured with Azure Files storage mount
+   - Environment-specific (e.g., `ip-geo-analytics-staging-env`)
 
 3. **PostgreSQL Container App** (`postgres`)
    - Image: `postgres:15-alpine`
@@ -36,6 +38,10 @@ The deployment creates the following resources:
 The deployment workflow is triggered on:
 - Manual workflow dispatch (choose environment: staging or production)
 - Git tags matching `v*` pattern
+
+**Required GitHub Secrets:**
+- `AZURE_CREDENTIALS` - Azure Service Principal credentials (JSON)
+- `POSTGRES_PASSWORD` - PostgreSQL admin password (optional, defaults to 'analytics123' if not set)
 
 ```bash
 # Tag-based deployment

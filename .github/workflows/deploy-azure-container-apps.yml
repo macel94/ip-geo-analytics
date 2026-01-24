@@ -63,7 +63,7 @@ jobs:
               registryServer=${{ env.REGISTRY }} \
               registryUsername=${{ github.actor }} \
               registryPassword=${{ secrets.GITHUB_TOKEN }} \
-              postgresPassword=analytics123 \
+              postgresPassword=${{ secrets.POSTGRES_PASSWORD || 'analytics123' }} \
             --query 'properties.outputs' \
             -o json)
           

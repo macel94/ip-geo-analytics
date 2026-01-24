@@ -25,9 +25,9 @@ param registryPassword string
 param postgresPassword string
 
 // Variables
-var storageAccountName = 'ipgeoanalyticssa'
+var storageAccountName = 'ipgeoanalytics${environment}sa'
 var storageShareName = 'pgdata'
-var containerAppEnvName = 'ip-geo-analytics-env'
+var containerAppEnvName = 'ip-geo-analytics-${environment}-env'
 var storageMountName = 'pgdatavolume'
 
 // Storage Account for PostgreSQL persistence
