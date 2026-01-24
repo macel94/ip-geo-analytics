@@ -121,7 +121,9 @@ The infrastructure is defined using **Bicep** templates in the [`infra/`](infra/
 1. An Azure subscription
 2. GitHub repository secrets configured:
    - `AZURE_CREDENTIALS`: Azure Service Principal credentials (JSON)
-   - `POSTGRES_PASSWORD`: PostgreSQL admin password (optional, defaults to 'analytics123')
+   - `POSTGRES_PASSWORD`: PostgreSQL admin password (recommended for production, defaults to 'analytics123' for demo)
+
+> **⚠️ Security Note**: For production deployments, always set `POSTGRES_PASSWORD` as a GitHub secret. The default password is only for demo convenience.
 
 ### Setup Azure Credentials
 

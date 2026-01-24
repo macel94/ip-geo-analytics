@@ -41,7 +41,9 @@ The deployment workflow is triggered on:
 
 **Required GitHub Secrets:**
 - `AZURE_CREDENTIALS` - Azure Service Principal credentials (JSON)
-- `POSTGRES_PASSWORD` - PostgreSQL admin password (optional, defaults to 'analytics123' if not set)
+- `POSTGRES_PASSWORD` - PostgreSQL admin password (recommended for production, defaults to 'analytics123' for demo/staging)
+
+> **⚠️ Security Note**: For production deployments, always set `POSTGRES_PASSWORD` as a GitHub secret with a strong, unique password. The default is only provided for demo and development convenience.
 
 ```bash
 # Tag-based deployment
@@ -116,11 +118,24 @@ PostgreSQL data is stored in Azure Files share (`pgdata`), ensuring data persist
 
 ## Security Considerations
 
-- PostgreSQL is not exposed to the internet (internal ingress only)
+- PostgreSQL is not exposed to the internet (internal TCP ingress only)
 - Application uses HTTPS (Azure Container Apps automatic TLS)
-- Container registry credentials stored as secrets
+- Container registry credentials stored as secrets in Bicep
 - Secure parameters used for sensitive data (passwords, tokens)
 - Storage account uses TLS 1.2 minimum
+
+### Database Security
+
+The PostgreSQL password is passed as an environment variable in the DATABASE_URL. While this is acceptable for this demo project because:
+1. PostgreSQL has internal-only ingress (not exposed to internet)
+2. Container Apps environment provides network isolation
+3. Only the app container can connect to PostgreSQL
+
+For enhanced security in production:
+- Consider using Azure Key Vault for secrets
+- Use managed identities where possible
+- Rotate passwords regularly
+- Enable audit logging
 
 ## Troubleshooting
 
