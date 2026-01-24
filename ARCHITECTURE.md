@@ -269,6 +269,7 @@
 ## Deployment Architecture
 
 ### Azure Container Apps (Individual Container Deployment)
+
 ```
 ┌──────────────────────────────────────────────────┐
 │   Azure Resource Group (rg-ip-geo-analytics)     │
@@ -295,7 +296,7 @@
 │  │  ┌──────────────────────────────────────┐  │  │
 │  │  │  Container App (postgres)            │  │  │
 │  │  │  - 1 replica (always on)             │  │  │
-│  │  │  - Image: postgres:15-alpine         │  │  │
+│  │  │  - Image: postgres:18-alpine         │  │  │
 │  │  │  - Internal ingress (TCP)            │  │  │
 │  │  │  - Azure Files volume mounted        │  │  │
 │  │  └──────────────────────────────────────┘  │  │
@@ -308,42 +309,47 @@ Config file: docker-compose.azure.yml (reference documentation)
 
 ## Key Components Summary
 
-| Component | Purpose | Location |
-|-----------|---------|----------|
-| Health Check | Liveness probe | `/health` |
-| Readiness Check | Ready to serve traffic | `/ready` |
-| Metrics | Prometheus metrics | `/metrics` |
-| Tracking API | Record visitor data | `/api/track` |
-| Stats API | Retrieve analytics | `/api/stats` |
-| CI/CD | Automated testing & deployment | `.github/workflows/` |
-| Deployment | Azure Container Apps | `docker-compose.azure.yml` |
-| Automation | Operational scripts | `scripts/automation/` |
-| Documentation | SRE guides | `docs/` |
+| Component       | Purpose                        | Location                   |
+| --------------- | ------------------------------ | -------------------------- |
+| Health Check    | Liveness probe                 | `/health`                  |
+| Readiness Check | Ready to serve traffic         | `/ready`                   |
+| Metrics         | Prometheus metrics             | `/metrics`                 |
+| Tracking API    | Record visitor data            | `/api/track`               |
+| Stats API       | Retrieve analytics             | `/api/stats`               |
+| CI/CD           | Automated testing & deployment | `.github/workflows/`       |
+| Deployment      | Azure Container Apps           | `docker-compose.azure.yml` |
+| Automation      | Operational scripts            | `scripts/automation/`      |
+| Documentation   | SRE guides                     | `docs/`                    |
 
 ## Technology Stack
 
 **Frontend:**
+
 - React 19
 - Vite 5
 - Leaflet (maps)
 - Chart.js (charts)
 
 **Backend:**
+
 - Node.js 24
 - Fastify 5
 - Prisma 7
-- PostgreSQL 15
+- PostgreSQL 18
 
 **Infrastructure:**
+
 - Docker (containerization)
 - Azure Container Apps (cloud deployment)
 - GitHub Actions (CI/CD)
 
 **Monitoring:**
+
 - Prometheus metrics format
 - Custom health checks
 
 **Security:**
+
 - Trivy (container scanning)
 - CodeQL (SAST)
 - TruffleHog (secret scanning)

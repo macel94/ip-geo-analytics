@@ -14,7 +14,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:15-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_USER: admin
           POSTGRES_PASSWORD: password123

@@ -182,7 +182,7 @@
           "containers": [
             {
               "name": "postgres",
-              "image": "postgres:15-alpine",
+              "image": "postgres:18-alpine",
               "env": [
                 {
                   "name": "POSTGRES_USER",

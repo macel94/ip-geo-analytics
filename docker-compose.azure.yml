@@ -1,6 +1,6 @@
 # Docker Compose Reference File for Azure Container Apps
 # ========================================================
-# 
+#
 # IMPORTANT: This file is REFERENCE DOCUMENTATION ONLY.
 # The actual Azure deployment uses individual `az containerapp create` commands
 # with YAML configs to properly mount Azure Files storage for PostgreSQL persistence.
@@ -16,7 +16,7 @@
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres:18-alpine
     environment:
       # For production, these should be passed as secrets
       - POSTGRES_USER=admin

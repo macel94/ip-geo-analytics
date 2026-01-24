@@ -18,11 +18,12 @@ The deployment creates the following resources:
    - Environment-specific (e.g., `ip-geo-analytics-staging-env`)
 
 3. **PostgreSQL Container App** (`postgres`)
-   - Image: `postgres:15-alpine`
-   - Internal TCP ingress (port 5432)
-   - Persistent volume mounted at `/var/lib/postgresql/data`
-   - Scale: 0-1 replicas (scale-to-zero enabled)
-   - Resources: 0.25 CPU, 0.5Gi memory
+
+- Image: `postgres:18-alpine`
+- Internal TCP ingress (port 5432)
+- Persistent volume mounted at `/var/lib/postgresql/data`
+- Scale: 0-1 replicas (scale-to-zero enabled)
+- Resources: 0.25 CPU, 0.5Gi memory
 
 4. **Application Container App** (`app`)
    - Custom application image from GitHub Container Registry
@@ -44,6 +45,7 @@ When you open a PR that modifies infrastructure files, the **Validate Bicep Infr
 This allows you to review infrastructure changes before merging and deploying.
 
 **Triggered by changes to**:
+
 - `infra/**` (any Bicep files)
 - `.github/workflows/deploy-azure-container-apps.yml`
 - `.github/workflows/validate-bicep.yml`
@@ -51,10 +53,12 @@ This allows you to review infrastructure changes before merging and deploying.
 ### Via GitHub Actions (Recommended)
 
 The deployment workflow is triggered on:
+
 - Manual workflow dispatch (choose environment: staging or production)
 - Git tags matching `v*` pattern
 
 **Required GitHub Secrets:**
+
 - `AZURE_CREDENTIALS` - Azure Service Principal credentials (JSON)
 - `POSTGRES_PASSWORD` - PostgreSQL admin password (recommended for production, defaults to 'analytics123' for demo/staging)
 
@@ -69,6 +73,7 @@ git push origin v1.0.0
 ### Manual Deployment
 
 Prerequisites:
+
 - Azure CLI installed
 - Logged in to Azure (`az login`)
 - GitHub Container Registry credentials
@@ -95,22 +100,22 @@ az deployment group create \
 
 ## Parameters
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `location` | string | No | Resource group location | Azure region for resources |
-| `environment` | string | No | `staging` | Environment name (staging/production) |
-| `imageTag` | string | Yes | - | Full container image tag |
-| `registryServer` | string | No | `ghcr.io` | Container registry server |
-| `registryUsername` | string | Yes | - | Container registry username |
-| `registryPassword` | string | Yes | - | Container registry password/PAT |
-| `postgresPassword` | string | Yes | - | PostgreSQL admin password |
+| Parameter          | Type   | Required | Default                 | Description                           |
+| ------------------ | ------ | -------- | ----------------------- | ------------------------------------- |
+| `location`         | string | No       | Resource group location | Azure region for resources            |
+| `environment`      | string | No       | `staging`               | Environment name (staging/production) |
+| `imageTag`         | string | Yes      | -                       | Full container image tag              |
+| `registryServer`   | string | No       | `ghcr.io`               | Container registry server             |
+| `registryUsername` | string | Yes      | -                       | Container registry username           |
+| `registryPassword` | string | Yes      | -                       | Container registry password/PAT       |
+| `postgresPassword` | string | Yes      | -                       | PostgreSQL admin password             |
 
 ## Outputs
 
-| Output | Description |
-|--------|-------------|
-| `appUrl` | HTTPS URL of the deployed application |
-| `storageAccountName` | Name of the storage account |
+| Output                | Description                            |
+| --------------------- | -------------------------------------- |
+| `appUrl`              | HTTPS URL of the deployed application  |
+| `storageAccountName`  | Name of the storage account            |
 | `containerAppEnvName` | Name of the Container Apps environment |
 
 ## Cost Estimation
@@ -126,6 +131,7 @@ The PostgreSQL container app uses internal TCP ingress, making it accessible onl
 ## Data Persistence
 
 PostgreSQL data is stored in Azure Files share (`pgdata`), ensuring data persists across:
+
 - Container restarts
 - Container updates
 - Environment changes
@@ -142,11 +148,13 @@ PostgreSQL data is stored in Azure Files share (`pgdata`), ensuring data persist
 ### Database Security
 
 The PostgreSQL password is passed as an environment variable in the DATABASE_URL. While this is acceptable for this demo project because:
+
 1. PostgreSQL has internal-only ingress (not exposed to internet)
 2. Container Apps environment provides network isolation
 3. Only the app container can connect to PostgreSQL
 
 For enhanced security in production:
+
 - Consider using Azure Key Vault for secrets
 - Use managed identities where possible
 - Rotate passwords regularly

@@ -135,7 +135,7 @@ resource postgresApp 'Microsoft.App/containerApps@2023-05-01' = {
       containers: [
         {
           name: 'postgres'
-          image: 'postgres:15-alpine'
+          image: 'postgres:18-alpine'
           env: [
             {
               name: 'POSTGRES_USER'

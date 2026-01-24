@@ -5,6 +5,7 @@ This directory contains automation scripts for SRE operations.
 ## Database Backup
 
 ### Automated Backup Script
+
 ```bash
 #!/bin/bash
 # scripts/backup-database.sh
@@ -40,12 +41,14 @@ echo "Backup completed: $BACKUP_FILE.gz"
 ```
 
 ### Cron Job Setup
+
 ```bash
 # Add to crontab (daily at 2 AM)
 0 2 * * * /app/scripts/backup-database.sh >> /var/log/backup.log 2>&1
 ```
 
 ### Kubernetes CronJob
+
 ```yaml
 apiVersion: batch/v1
 kind: CronJob
@@ -53,39 +56,40 @@ metadata:
   name: database-backup
   namespace: visitor-analytics
 spec:
-  schedule: "0 2 * * *"  # Daily at 2 AM
+  schedule: "0 2 * * *" # Daily at 2 AM
   jobTemplate:
     spec:
       template:
         spec:
           containers:
-          - name: backup
-            image: postgres:15-alpine
-            env:
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: db-credentials
-                  key: DATABASE_URL
-            command:
-            - /bin/sh
-            - -c
-            - |
-              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-              pg_dump "$DATABASE_URL" | gzip > /backups/backup_$TIMESTAMP.sql.gz
-            volumeMounts:
-            - name: backup-storage
-              mountPath: /backups
+            - name: backup
+              image: postgres:18-alpine
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: db-credentials
+                      key: DATABASE_URL
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+                  pg_dump "$DATABASE_URL" | gzip > /backups/backup_$TIMESTAMP.sql.gz
+              volumeMounts:
+                - name: backup-storage
+                  mountPath: /backups
           volumes:
-          - name: backup-storage
-            persistentVolumeClaim:
-              claimName: backup-pvc
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: backup-pvc
           restartPolicy: OnFailure
 ```
 
 ## Health Check Monitoring
 
 ### Simple Uptime Monitor
+
 ```bash
 #!/bin/bash
 # scripts/health-check.sh
@@ -95,26 +99,26 @@ SLACK_WEBHOOK="${SLACK_WEBHOOK_URL}"
 
 check_health() {
     local response=$(curl -s -o /dev/null -w "%{http_code}" "$ENDPOINT")
-    
+
     if [ "$response" != "200" ]; then
         echo "Health check failed with status: $response"
         send_alert "Health check failed for $ENDPOINT (Status: $response)"
         return 1
     fi
-    
+
     echo "Health check passed"
     return 0
 }
 
 send_alert() {
     local message="$1"
-    
+
     if [ -n "$SLACK_WEBHOOK" ]; then
         curl -X POST -H 'Content-type: application/json' \
             --data "{\"text\":\"⚠️ Alert: $message\"}" \
             "$SLACK_WEBHOOK"
     fi
-    
+
     # Send email (if configured)
     if [ -n "$ALERT_EMAIL" ]; then
         echo "$message" | mail -s "Health Check Alert" "$ALERT_EMAIL"
@@ -127,6 +131,7 @@ check_health
 ## Performance Testing
 
 ### Load Testing Script
+
 ```bash
 #!/bin/bash
 # scripts/load-test.sh
@@ -148,7 +153,7 @@ config:
     - duration: 60
       arrivalRate: 100
       name: "Peak load"
-  
+
 scenarios:
   - name: "Track visitor"
     flow:
@@ -157,7 +162,7 @@ scenarios:
           json:
             site_id: "test-site"
             referrer: "https://example.com"
-  
+
   - name: "Get stats"
     flow:
       - get:
@@ -172,6 +177,7 @@ rm /tmp/load-test.yml
 ## Deployment Automation
 
 ### Blue-Green Deployment Script
+
 ```bash
 #!/bin/bash
 # scripts/blue-green-deploy.sh
@@ -206,6 +212,7 @@ echo "Deployment successful!"
 ```
 
 ### Canary Deployment (with Istio)
+
 ```yaml
 # scripts/canary-deploy.yaml
 apiVersion: v1
@@ -218,8 +225,8 @@ spec:
     app: visitor-analytics
     version: canary
   ports:
-  - port: 80
-    targetPort: 3000
+    - port: 80
+      targetPort: 3000
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -228,27 +235,28 @@ metadata:
   namespace: visitor-analytics
 spec:
   hosts:
-  - visitor-analytics
+    - visitor-analytics
   http:
-  - match:
-    - headers:
-        canary:
-          exact: "true"
-    route:
-    - destination:
-        host: visitor-analytics-canary
-  - route:
-    - destination:
-        host: visitor-analytics
-      weight: 90
-    - destination:
-        host: visitor-analytics-canary
-      weight: 10
+    - match:
+        - headers:
+            canary:
+              exact: "true"
+      route:
+        - destination:
+            host: visitor-analytics-canary
+    - route:
+        - destination:
+            host: visitor-analytics
+          weight: 90
+        - destination:
+            host: visitor-analytics-canary
+          weight: 10
 ```
 
 ## Log Aggregation
 
 ### Fluentd Configuration
+
 ```yaml
 # scripts/fluentd-config.yaml
 apiVersion: v1
@@ -268,11 +276,11 @@ data:
         time_format %Y-%m-%dT%H:%M:%S.%NZ
       </parse>
     </source>
-    
+
     <filter kubernetes.**>
       @type kubernetes_metadata
     </filter>
-    
+
     <match kubernetes.**>
       @type elasticsearch
       host elasticsearch-service
@@ -285,6 +293,7 @@ data:
 ## Chaos Engineering
 
 ### Chaos Mesh Experiments
+
 ```yaml
 # scripts/chaos-experiments.yaml
 apiVersion: chaos-mesh.org/v1alpha1
@@ -328,52 +337,54 @@ spec:
 ## Alerting Rules
 
 ### Prometheus Alert Rules
+
 ```yaml
 # scripts/prometheus-alerts.yaml
 groups:
-- name: visitor-analytics
-  interval: 30s
-  rules:
-  - alert: HighErrorRate
-    expr: rate(http_errors_total[5m]) > 0.05
-    for: 5m
-    labels:
-      severity: warning
-    annotations:
-      summary: "High error rate detected"
-      description: "Error rate is {{ $value }} requests/second"
-  
-  - alert: HighMemoryUsage
-    expr: nodejs_memory_usage_bytes{type="heapUsed"} / nodejs_memory_usage_bytes{type="heapTotal"} > 0.9
-    for: 10m
-    labels:
-      severity: warning
-    annotations:
-      summary: "High memory usage"
-      description: "Memory usage is above 90%"
-  
-  - alert: ServiceDown
-    expr: up{job="visitor-analytics"} == 0
-    for: 1m
-    labels:
-      severity: critical
-    annotations:
-      summary: "Service is down"
-      description: "Visitor Analytics service is not responding"
-  
-  - alert: DatabaseConnectionFailure
-    expr: increase(http_errors_total[5m]) > 100
-    for: 2m
-    labels:
-      severity: critical
-    annotations:
-      summary: "Possible database connection issues"
-      description: "High number of errors may indicate database problems"
+  - name: visitor-analytics
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: rate(http_errors_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} requests/second"
+
+      - alert: HighMemoryUsage
+        expr: nodejs_memory_usage_bytes{type="heapUsed"} / nodejs_memory_usage_bytes{type="heapTotal"} > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is above 90%"
+
+      - alert: ServiceDown
+        expr: up{job="visitor-analytics"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service is down"
+          description: "Visitor Analytics service is not responding"
+
+      - alert: DatabaseConnectionFailure
+        expr: increase(http_errors_total[5m]) > 100
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Possible database connection issues"
+          description: "High number of errors may indicate database problems"
 ```
 
 ## Usage
 
 ### Setting up automated backups
+
 ```bash
 # Azure Container Apps
 az containerapp job create \
@@ -382,12 +393,13 @@ az containerapp job create \
   --environment <env-name> \
   --trigger-type "Schedule" \
   --cron-expression "0 2 * * *" \
-  --image postgres:15-alpine \
+  --image postgres:18-alpine \
   --command "/bin/sh" \
   --args "-c" "pg_dump \$DATABASE_URL | gzip > /backups/backup_\$(date +%Y%m%d).sql.gz"
 ```
 
 ### Running performance tests
+
 ```bash
 # Install artillery
 npm install -g artillery
@@ -397,6 +409,7 @@ npm install -g artillery
 ```
 
 ### Deploying with canary strategy
+
 ```bash
 # Apply canary configuration
 kubectl apply -f scripts/canary-deploy.yaml
