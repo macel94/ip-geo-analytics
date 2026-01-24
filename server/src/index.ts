@@ -40,7 +40,12 @@ fastify.register(fastifyStatic, {
 });
 
 interface TrackBody {
-  site_id: string;
+  site_id?: string;
+  referrer?: string;
+}
+
+interface TrackQuery {
+  site_id?: string;
   referrer?: string;
 }
 
@@ -49,18 +54,18 @@ fastify.get("/health", async (request, reply) => {
   try {
     // Check database connectivity
     await prisma.$queryRaw`SELECT 1`;
-    return { 
-      status: "healthy", 
+    return {
+      status: "healthy",
       timestamp: new Date().toISOString(),
-      database: "connected"
+      database: "connected",
     };
   } catch (error) {
     reply.code(503);
-    return { 
-      status: "unhealthy", 
+    return {
+      status: "unhealthy",
       timestamp: new Date().toISOString(),
       database: "disconnected",
-      error: error instanceof Error ? error.message : "Unknown error"
+      error: error instanceof Error ? error.message : "Unknown error",
     };
   }
 });
@@ -82,7 +87,7 @@ let trackingCount = 0;
 let errorCount = 0;
 const startTime = Date.now();
 
-fastify.addHook('onRequest', async (request, reply) => {
+fastify.addHook("onRequest", async (request, reply) => {
   requestCount++;
 });
 
@@ -111,14 +116,17 @@ fastify.get("/metrics", async (request, reply) => {
     `nodejs_memory_usage_bytes{type="heapTotal"} ${process.memoryUsage().heapTotal}`,
     `nodejs_memory_usage_bytes{type="heapUsed"} ${process.memoryUsage().heapUsed}`,
     `nodejs_memory_usage_bytes{type="external"} ${process.memoryUsage().external}`,
-  ].join('\n');
-  
-  reply.type('text/plain').send(metrics);
+  ].join("\n");
+
+  reply.type("text/plain").send(metrics);
 });
 
 // 1. Tracking Endpoint
-fastify.post<{ Body: TrackBody }>("/api/track", async (request, reply) => {
-  const { site_id, referrer } = request.body;
+const trackVisit = async (
+  request: FastifyRequest,
+  site_id: string,
+  referrer?: string,
+) => {
   const userAgentString = request.headers["user-agent"] || "";
 
   // IP Extraction Logic
@@ -138,24 +146,101 @@ fastify.post<{ Body: TrackBody }>("/api/track", async (request, reply) => {
   const os = ua.getOS();
   const device = ua.getDevice();
 
+  await prisma.visit.create({
+    data: {
+      site_id,
+      ip_address: ip,
+      city: geo.city,
+      country: geo.country,
+      countryCode: geo.countryCode,
+      // asn: ... (requires ASN DB),
+      browser: browser.name,
+      os: os.name,
+      device: device.type || "desktop",
+      referrer: referrer || request.headers.referer,
+      user_agent: userAgentString,
+    },
+  });
+  trackingCount++;
+};
+
+const resolveSiteId = (
+  request: FastifyRequest,
+  explicitSiteId?: string,
+  explicitReferrer?: string,
+) => {
+  if (explicitSiteId) {
+    return explicitSiteId;
+  }
+
+  const headerReferrerRaw =
+    explicitReferrer || request.headers.referer || request.headers.referrer;
+  const headerReferrer = Array.isArray(headerReferrerRaw)
+    ? headerReferrerRaw[0]
+    : headerReferrerRaw;
+
+  if (headerReferrer) {
+    try {
+      const url = new URL(headerReferrer);
+      if (url.hostname) {
+        return url.hostname;
+      }
+    } catch {
+      // ignore invalid referrer
+    }
+  }
+
+  const host = request.headers.host;
+  if (host) {
+    return host.split(":")[0];
+  }
+
+  return undefined;
+};
+
+fastify.post<{ Body: TrackBody }>("/api/track", async (request, reply) => {
+  const { site_id, referrer } = request.body;
+  const resolvedSiteId = resolveSiteId(request, site_id, referrer);
+
+  if (!resolvedSiteId) {
+    reply.code(400).send({ error: "site_id is required" });
+    return;
+  }
+
   try {
-    await prisma.visit.create({
-      data: {
-        site_id,
-        ip_address: ip,
-        city: geo.city,
-        country: geo.country,
-        countryCode: geo.countryCode,
-        // asn: ... (requires ASN DB),
-        browser: browser.name,
-        os: os.name,
-        device: device.type || "desktop",
-        referrer: referrer || request.headers.referer,
-        user_agent: userAgentString,
-      },
-    });
-    trackingCount++;
+    await trackVisit(request, resolvedSiteId, referrer);
     return { success: true };
+  } catch (e) {
+    request.log.error(e);
+    errorCount++;
+    reply.code(500).send({ error: "Tracking failed" });
+  }
+});
+
+fastify.get("/api/track", async (request, reply) => {
+  const { site_id, referrer } = request.query as TrackQuery;
+  const resolvedSiteId = resolveSiteId(request, site_id, referrer);
+
+  if (!resolvedSiteId) {
+    reply.code(400).send({ error: "site_id is required" });
+    return;
+  }
+
+  try {
+    await trackVisit(request, resolvedSiteId, referrer);
+    const pixel = Buffer.from(
+      "R0lGODlhAQABAPAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      "base64",
+    );
+    reply
+      .header(
+        "Cache-Control",
+        "no-store, no-cache, must-revalidate, proxy-revalidate",
+      )
+      .header("Pragma", "no-cache")
+      .header("Expires", "0")
+      .type("image/gif")
+      .send(pixel);
   } catch (e) {
     request.log.error(e);
     errorCount++;
