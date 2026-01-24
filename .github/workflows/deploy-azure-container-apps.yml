@@ -20,10 +20,6 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   AZURE_RESOURCE_GROUP: rg-ip-geo-analytics
   AZURE_LOCATION: eastus
-  AZURE_CONTAINER_APP_ENV: ip-geo-analytics-env
-  AZURE_STORAGE_ACCOUNT: ipgeoanalyticssa
-  AZURE_STORAGE_SHARE: pgdata
-  AZURE_STORAGE_MOUNT_NAME: pgdatavolume
 
 jobs:
   deploy:
@@ -46,10 +42,6 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Install Azure CLI extensions
-        run: |
-          az extension add --name containerapp --upgrade --yes
-
       - name: Create Resource Group
         run: |
           az group create \
@@ -57,151 +49,28 @@ jobs:
             --location ${{ env.AZURE_LOCATION }} \
             --output none || true
 
-      - name: Create Storage Account and File Share
-        id: storage
-        run: |
-          # Create storage account (idempotent - will succeed or show existing)
-          az storage account create \
-            --name ${{ env.AZURE_STORAGE_ACCOUNT }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --location ${{ env.AZURE_LOCATION }} \
-            --sku Standard_LRS \
-            --kind StorageV2 \
-            --enable-large-file-share \
-            --output none || echo "Storage account already exists or creation in progress"
-          
-          # Get storage account key
-          STORAGE_KEY=$(az storage account keys list \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --account-name ${{ env.AZURE_STORAGE_ACCOUNT }} \
-            --query "[0].value" -o tsv)
-          echo "::add-mask::$STORAGE_KEY"
-          echo "storage_key=$STORAGE_KEY" >> $GITHUB_OUTPUT
-          
-          # Create file share (idempotent)
-          az storage share-rm create \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --storage-account ${{ env.AZURE_STORAGE_ACCOUNT }} \
-            --name ${{ env.AZURE_STORAGE_SHARE }} \
-            --quota 1024 \
-            --enabled-protocols SMB \
-            --output none || echo "File share already exists"
-
-      - name: Create Container Apps Environment
-        run: |
-          # Check if environment exists
-          ENV_EXISTS=$(az containerapp env show \
-            --name ${{ env.AZURE_CONTAINER_APP_ENV }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --query "name" -o tsv 2>/dev/null || echo "")
-          
-          if [ -z "$ENV_EXISTS" ]; then
-            echo "Creating Container Apps Environment..."
-            az containerapp env create \
-              --name ${{ env.AZURE_CONTAINER_APP_ENV }} \
-              --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-              --location ${{ env.AZURE_LOCATION }}
-          else
-            echo "Container Apps Environment already exists"
-          fi
-
-      - name: Configure Storage Mount in Environment
-        run: |
-          # Link Azure Files share to Container Apps environment (idempotent)
-          az containerapp env storage set \
-            --name ${{ env.AZURE_CONTAINER_APP_ENV }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --storage-name ${{ env.AZURE_STORAGE_MOUNT_NAME }} \
-            --azure-file-account-name ${{ env.AZURE_STORAGE_ACCOUNT }} \
-            --azure-file-account-key "${{ steps.storage.outputs.storage_key }}" \
-            --azure-file-share-name ${{ env.AZURE_STORAGE_SHARE }} \
-            --access-mode ReadWrite \
-            --output none
-
-      - name: Deploy PostgreSQL Container with Persistent Storage
-        run: |
-          # Get subscription ID for managed environment path
-          SUBSCRIPTION_ID=$(az account show --query id -o tsv)
-          
-          # Copy template and replace placeholders with actual values
-          cp .github/azure-templates/postgres-container-app.yaml /tmp/postgres-app.yaml
-          sed -i "s|SUBSCRIPTION_ID_PLACEHOLDER|${SUBSCRIPTION_ID}|g" /tmp/postgres-app.yaml
-          sed -i "s|AZURE_RESOURCE_GROUP_PLACEHOLDER|${{ env.AZURE_RESOURCE_GROUP }}|g" /tmp/postgres-app.yaml
-          sed -i "s|AZURE_CONTAINER_APP_ENV_PLACEHOLDER|${{ env.AZURE_CONTAINER_APP_ENV }}|g" /tmp/postgres-app.yaml
-          sed -i "s|AZURE_STORAGE_MOUNT_NAME_PLACEHOLDER|${{ env.AZURE_STORAGE_MOUNT_NAME }}|g" /tmp/postgres-app.yaml
-          
-          # Debug: show generated YAML
-          echo "Generated YAML:"
-          cat /tmp/postgres-app.yaml
-          
-          # Check if postgres app exists
-          POSTGRES_EXISTS=$(az containerapp show \
-            --name postgres \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --query "name" -o tsv 2>/dev/null || echo "")
-          
-          if [ -z "$POSTGRES_EXISTS" ]; then
-            echo "Creating PostgreSQL container app..."
-            az containerapp create \
-              --name postgres \
-              --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-              --yaml /tmp/postgres-app.yaml
-          else
-            echo "Updating PostgreSQL container app..."
-            az containerapp update \
-              --name postgres \
-              --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-              --yaml /tmp/postgres-app.yaml
-          fi
-          
-          # Wait for PostgreSQL to be ready
-          echo "Waiting for PostgreSQL container to be ready..."
-          sleep 30
-
-      - name: Deploy Application Container
+      - name: Deploy Infrastructure with Bicep
         id: deploy
         run: |
-          # In Azure Container Apps, apps within the same environment can communicate
-          # using the container app name directly. For internal TCP ingress, we use
-          # the simple name 'postgres' instead of querying the FQDN.
-          # See: https://learn.microsoft.com/en-us/azure/container-apps/connect-apps
-          POSTGRES_HOST="postgres"
-          echo "PostgreSQL internal hostname: $POSTGRES_HOST"
+          # Deploy using Bicep
+          DEPLOYMENT_OUTPUT=$(az deployment group create \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --template-file infra/main.bicep \
+            --parameters \
+              location=${{ env.AZURE_LOCATION }} \
+              environment=${{ github.event.inputs.environment || 'staging' }} \
+              imageTag=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }} \
+              registryServer=${{ env.REGISTRY }} \
+              registryUsername=${{ github.actor }} \
+              registryPassword=${{ secrets.GITHUB_TOKEN }} \
+              postgresPassword=analytics123 \
+            --query 'properties.outputs' \
+            -o json)
           
-          # Deploy the application container
-          az containerapp create \
-            --name app \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
-            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }} \
-            --registry-server ${{ env.REGISTRY }} \
-            --registry-username ${{ github.actor }} \
-            --registry-password ${{ secrets.GITHUB_TOKEN }} \
-            --target-port 3000 \
-            --ingress external \
-            --min-replicas 0 \
-            --max-replicas 3 \
-            --cpu 0.25 \
-            --memory 0.5Gi \
-            --env-vars \
-              "NODE_ENV=production" \
-              "PORT=3000" \
-              "DATABASE_URL=postgresql://admin:analytics123@${POSTGRES_HOST}:5432/analytics?schema=public" \
-            || \
-          az containerapp update \
-            --name app \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }} \
-            --min-replicas 0 \
-            --max-replicas 3
-          
-          # Get the app URL
-          APP_URL=$(az containerapp show \
-            --name app \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --query "properties.configuration.ingress.fqdn" -o tsv)
-          echo "app_url=https://$APP_URL" >> $GITHUB_OUTPUT
-          echo "Application URL: https://$APP_URL"
+          # Extract app URL from deployment outputs
+          APP_URL=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.appUrl.value')
+          echo "app_url=$APP_URL" >> $GITHUB_OUTPUT
+          echo "Application URL: $APP_URL"
 
   verify-deployment:
     name: Verify Deployment
@@ -263,9 +132,9 @@ jobs:
           echo "| Environment | ${{ github.event.inputs.environment || 'staging' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Image Tag | sha-${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Resource Group | ${{ env.AZURE_RESOURCE_GROUP }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Storage Account | ${{ env.AZURE_STORAGE_ACCOUNT }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Infrastructure" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployment Method**: Bicep Infrastructure as Code" >> $GITHUB_STEP_SUMMARY
           echo "- **App container**: scale-to-zero enabled (0-3 replicas)" >> $GITHUB_STEP_SUMMARY
           echo "- **PostgreSQL container**: scale-to-zero enabled (0-1 replicas) with internal ingress and Azure Files persistent storage" >> $GITHUB_STEP_SUMMARY
           echo "- **Storage**: Azure Files share mounted at /var/lib/postgresql/data" >> $GITHUB_STEP_SUMMARY
