@@ -12,24 +12,42 @@ The deployment creates the following resources:
    - 1TB quota
    - Environment-specific naming (e.g., `ipgeoanalyticsstagingsa`, `ipgeoanalyticsproductionsa`)
 
-2. **Container Apps Environment** (`ip-geo-analytics-{environment}-env`)
+2. **Log Analytics Workspace** (`ip-geo-analytics-{environment}-logs`)
+   - Centralized logging for Container Apps
+   - Configurable retention (30-730 days)
+   - Used by both Container Apps environment and Application Insights
+
+3. **Application Insights** (`ip-geo-analytics-{environment}-appinsights`)
+   - Application monitoring and telemetry
+   - Connected to Log Analytics workspace for log aggregation
+   - Connection string passed to app container for SDK integration
+
+4. **Container Apps Environment** (`ip-geo-analytics-{environment}-env`)
    - Hosts both PostgreSQL and application containers
    - Configured with Azure Files storage mount
+   - Log Analytics integration for container logs
    - Environment-specific (e.g., `ip-geo-analytics-staging-env`)
 
-3. **PostgreSQL Container App** (`postgres`)
+5. **PostgreSQL Container App** (`postgres`)
    - Image: `postgres:15-alpine`
    - Internal TCP ingress (port 5432)
    - Persistent volume mounted at `/var/lib/postgresql/data`
-   - Scale: 0-1 replicas (scale-to-zero enabled)
+   - **Scale: 1-1 replicas (always running)** - Required because TCP connections cannot wake scaled-to-zero containers
    - Resources: 0.25 CPU, 0.5Gi memory
+   - Health probes:
+     - TCP Liveness probe (port 5432, every 10s)
+     - TCP Readiness probe (port 5432, every 5s)
 
-4. **Application Container App** (`app`)
+6. **Application Container App** (`app`)
    - Custom application image from GitHub Container Registry
    - External HTTPS ingress (port 3000)
    - Scale: 0-3 replicas (scale-to-zero enabled)
    - Resources: 0.25 CPU, 0.5Gi memory
-   - Environment variables for database connection
+   - Environment variables for database connection and Application Insights
+   - Health probes:
+     - HTTP Startup probe (`/health`, allows 2.5 min startup for migrations)
+     - HTTP Liveness probe (`/health`, every 30s)
+     - HTTP Readiness probe (`/ready`, every 10s)
 
 ## Deployment
 
@@ -104,6 +122,7 @@ az deployment group create \
 | `registryUsername` | string | Yes | - | Container registry username |
 | `registryPassword` | string | Yes | - | Container registry password/PAT |
 | `postgresPassword` | string | Yes | - | PostgreSQL admin password |
+| `logRetentionDays` | int | No | `30` | Log Analytics retention in days (30-730) |
 
 ## Outputs
 
@@ -112,12 +131,18 @@ az deployment group create \
 | `appUrl` | HTTPS URL of the deployed application |
 | `storageAccountName` | Name of the storage account |
 | `containerAppEnvName` | Name of the Container Apps environment |
+| `appInsightsConnectionString` | Application Insights connection string |
+| `appInsightsInstrumentationKey` | Application Insights instrumentation key |
+| `logAnalyticsWorkspaceId` | Log Analytics workspace resource ID |
 
 ## Cost Estimation
 
 - **Container Apps**: Free tier includes 180k vCPU-seconds and 360k GiB-seconds per month
 - **Storage**: ~$0.06/GB/month for Azure Files Standard LRS
-- **Scale-to-zero**: Containers scale to 0 when idle, reducing costs
+- **Log Analytics**: Free tier includes 5GB/month ingestion
+- **Application Insights**: First 5GB/month free
+- **Scale-to-zero**: App container scales to 0 when idle, reducing costs
+- **Note**: PostgreSQL must run with minReplicas=1 because TCP connections cannot wake scaled-to-zero containers
 
 ## Internal Networking
 
@@ -157,17 +182,40 @@ For enhanced security in production:
 ### View Container Logs
 
 ```bash
-# Application logs
+# Application logs (stream)
 az containerapp logs show \
   --name app \
   --resource-group rg-ip-geo-analytics \
   --follow
 
-# PostgreSQL logs
+# PostgreSQL logs (stream)
 az containerapp logs show \
   --name postgres \
   --resource-group rg-ip-geo-analytics \
   --follow
+
+# View system logs (including health probe failures)
+az containerapp logs show \
+  --name app \
+  --resource-group rg-ip-geo-analytics \
+  --type system
+```
+
+### Check Container Revision Status
+
+```bash
+# Check if containers are running and healthy
+az containerapp revision list \
+  --name app \
+  --resource-group rg-ip-geo-analytics \
+  --query '[].{Name:name,Active:active,Replicas:replicas,Health:healthState,Created:createdTime}' \
+  -o table
+
+az containerapp revision list \
+  --name postgres \
+  --resource-group rg-ip-geo-analytics \
+  --query '[].{Name:name,Active:active,Replicas:replicas,Health:healthState,Created:createdTime}' \
+  -o table
 ```
 
 ### Check Deployment Status
@@ -178,6 +226,39 @@ az deployment group show \
   --name main \
   --query 'properties.{Status:provisioningState, Outputs:outputs}'
 ```
+
+### View Application Insights Logs
+
+```bash
+# Get Application Insights connection string
+az deployment group show \
+  --resource-group rg-ip-geo-analytics \
+  --name main \
+  --query 'properties.outputs.appInsightsConnectionString.value' -o tsv
+
+# Or view logs in Azure Portal:
+# 1. Go to Azure Portal -> Application Insights -> ip-geo-analytics-{env}-appinsights
+# 2. Click "Logs" in the left menu
+# 3. Query: traces | order by timestamp desc | take 100
+```
+
+### Common Issues
+
+**Containers not starting:**
+1. Check revision status (see above)
+2. Check system logs for health probe failures
+3. Verify PostgreSQL is running (minReplicas=1 is required)
+4. Check if image exists in GitHub Container Registry
+
+**Database connection failures:**
+1. Ensure PostgreSQL container is running: `az containerapp revision list --name postgres -g rg-ip-geo-analytics`
+2. Check PostgreSQL logs for startup errors
+3. Verify DATABASE_URL format is correct
+
+**No logs in Application Insights:**
+1. Verify APPLICATIONINSIGHTS_CONNECTION_STRING is set
+2. Check app container logs for Application Insights SDK errors
+3. Allow 2-5 minutes for logs to appear after container startup
 
 ### Connect to PostgreSQL
 

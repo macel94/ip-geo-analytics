@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "11417090075550815783"
+      "templateHash": "8524200965704592924"
     }
   },
   "parameters": {
@@ -210,11 +210,31 @@
                   "volumeName": "[variables('storageMountName')]",
                   "mountPath": "/var/lib/postgresql/data"
                 }
+              ],
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "tcpSocket": {
+                    "port": 5432
+                  },
+                  "initialDelaySeconds": 30,
+                  "periodSeconds": 10,
+                  "failureThreshold": 3
+                },
+                {
+                  "type": "Readiness",
+                  "tcpSocket": {
+                    "port": 5432
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 5,
+                  "failureThreshold": 3
+                }
               ]
             }
           ],
           "scale": {
-            "minReplicas": 0,
+            "minReplicas": 1,
             "maxReplicas": 1
           },
           "volumes": [
@@ -276,12 +296,48 @@
                 {
                   "name": "DATABASE_URL",
                   "value": "[format('postgresql://admin:{0}@postgres:5432/analytics?schema=public', parameters('postgresPassword'))]"
+                },
+                {
+                  "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                  "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]"
                 }
               ],
               "resources": {
                 "cpu": "[json('0.25')]",
                 "memory": "0.5Gi"
-              }
+              },
+              "probes": [
+                {
+                  "type": "Startup",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 3000
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 5,
+                  "failureThreshold": 30
+                },
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 3000
+                  },
+                  "initialDelaySeconds": 0,
+                  "periodSeconds": 30,
+                  "failureThreshold": 3
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/ready",
+                    "port": 3000
+                  },
+                  "initialDelaySeconds": 0,
+                  "periodSeconds": 10,
+                  "failureThreshold": 3
+                }
+              ]
             }
           ],
           "scale": {
@@ -291,6 +347,7 @@
         }
       },
       "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]",
         "[resourceId('Microsoft.App/managedEnvironments', variables('containerAppEnvName'))]",
         "[resourceId('Microsoft.App/containerApps', 'postgres')]"
       ]

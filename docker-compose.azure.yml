@@ -2,17 +2,18 @@
 # ========================================================
 # 
 # IMPORTANT: This file is REFERENCE DOCUMENTATION ONLY.
-# The actual Azure deployment uses individual `az containerapp create` commands
-# with YAML configs to properly mount Azure Files storage for PostgreSQL persistence.
+# The actual Azure deployment uses Bicep templates (infra/main.bicep)
+# with properly configured health probes and Azure Files storage.
 #
 # This file documents the container configuration but is NOT directly used by
 # the deployment workflow. It can be used for local development with Docker Compose.
 #
 # For actual deployment, see: .github/workflows/deploy-azure-container-apps.yml
 #
-# Cost optimized for test/demo: Uses Container Apps free tier with scale-to-zero.
-# Both containers share the free monthly quota (180k vCPU-sec, 360k GiB-sec).
-# PostgreSQL data is persisted to Azure Files storage mounted at /var/lib/postgresql/data.
+# Cost optimized for test/demo: Uses Container Apps free tier.
+# - PostgreSQL runs with minReplicas=1 (required for TCP database connections)
+# - App runs with scale-to-zero (0-3 replicas) 
+# - PostgreSQL data is persisted to Azure Files storage mounted at /var/lib/postgresql/data.
 
 services:
   postgres:
@@ -25,6 +26,12 @@ services:
       - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d analytics"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   app:
     # For local development, build from context instead of using registry image
@@ -37,8 +44,16 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - DATABASE_URL=postgresql://admin:analytics123@postgres:5432/analytics?schema=public
+      # For Azure: APPLICATIONINSIGHTS_CONNECTION_STRING is injected from App Insights resource
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 volumes:
   pgdata:

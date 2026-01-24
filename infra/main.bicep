@@ -116,6 +116,10 @@ resource envStorage 'Microsoft.App/managedEnvironments/storages@2023-05-01' = {
 }
 
 // PostgreSQL Container App
+// IMPORTANT: PostgreSQL must have minReplicas=1 because:
+// 1. It's a stateful workload that needs to be always available
+// 2. TCP connections cannot "wake up" a scaled-to-zero container like HTTP can
+// 3. The app container depends on PostgreSQL being available on startup
 resource postgresApp 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'postgres'
   location: location
@@ -162,10 +166,30 @@ resource postgresApp 'Microsoft.App/containerApps@2023-05-01' = {
               mountPath: '/var/lib/postgresql/data'
             }
           ]
+          probes: [
+            {
+              type: 'Liveness'
+              tcpSocket: {
+                port: 5432
+              }
+              initialDelaySeconds: 30
+              periodSeconds: 10
+              failureThreshold: 3
+            }
+            {
+              type: 'Readiness'
+              tcpSocket: {
+                port: 5432
+              }
+              initialDelaySeconds: 10
+              periodSeconds: 5
+              failureThreshold: 3
+            }
+          ]
         }
       ]
       scale: {
-        minReplicas: 0
+        minReplicas: 1
         maxReplicas: 1
       }
       volumes: [
@@ -227,11 +251,47 @@ resource appContainerApp 'Microsoft.App/containerApps@2023-05-01' = {
               name: 'DATABASE_URL'
               value: 'postgresql://admin:${postgresPassword}@postgres:5432/analytics?schema=public'
             }
+            {
+              name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+              value: appInsights.properties.ConnectionString
+            }
           ]
           resources: {
             cpu: json('0.25')
             memory: '0.5Gi'
           }
+          probes: [
+            {
+              type: 'Startup'
+              httpGet: {
+                path: '/health'
+                port: 3000
+              }
+              initialDelaySeconds: 10
+              periodSeconds: 5
+              failureThreshold: 30  // Allow up to 2.5 minutes for startup (migrations, cold start)
+            }
+            {
+              type: 'Liveness'
+              httpGet: {
+                path: '/health'
+                port: 3000
+              }
+              initialDelaySeconds: 0  // Starts after startup probe succeeds
+              periodSeconds: 30
+              failureThreshold: 3
+            }
+            {
+              type: 'Readiness'
+              httpGet: {
+                path: '/ready'
+                port: 3000
+              }
+              initialDelaySeconds: 0  // Starts after startup probe succeeds
+              periodSeconds: 10
+              failureThreshold: 3
+            }
+          ]
         }
       ]
       scale: {

@@ -135,11 +135,13 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Infrastructure" >> $GITHUB_STEP_SUMMARY
           echo "- **Deployment Method**: Bicep Infrastructure as Code" >> $GITHUB_STEP_SUMMARY
-          echo "- **App container**: scale-to-zero enabled (0-3 replicas)" >> $GITHUB_STEP_SUMMARY
-          echo "- **PostgreSQL container**: scale-to-zero enabled (0-1 replicas) with internal ingress and Azure Files persistent storage" >> $GITHUB_STEP_SUMMARY
+          echo "- **App container**: scale-to-zero enabled (0-3 replicas) with health probes (startup, liveness, readiness)" >> $GITHUB_STEP_SUMMARY
+          echo "- **PostgreSQL container**: always-on (minReplicas=1) with TCP health probes and Azure Files persistent storage" >> $GITHUB_STEP_SUMMARY
           echo "- **Storage**: Azure Files share mounted at /var/lib/postgresql/data" >> $GITHUB_STEP_SUMMARY
+          echo "- **Monitoring**: Application Insights connected for app telemetry and logging" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Cost Information" >> $GITHUB_STEP_SUMMARY
           echo "- Free tier quota: 180k vCPU-sec, 360k GiB-sec/month" >> $GITHUB_STEP_SUMMARY
           echo "- Storage: ~$0.06/GB/month for Azure Files Standard" >> $GITHUB_STEP_SUMMARY
+          echo "- Note: PostgreSQL runs with minReplicas=1 (TCP services cannot scale to zero)" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Data persists across container restarts" >> $GITHUB_STEP_SUMMARY
