@@ -11,3 +11,4 @@ server/geoip/GeoLite2-City.mmdb
 /test-results/
 /playwright-report/
 /playwright/.cache/
+infra/main.json
