@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "4524423174553251869"
+      "templateHash": "11417090075550815783"
     }
   },
   "parameters": {
@@ -53,13 +53,24 @@
       "metadata": {
         "description": "PostgreSQL admin password"
       }
+    },
+    "logRetentionDays": {
+      "type": "int",
+      "defaultValue": 30,
+      "minValue": 30,
+      "maxValue": 730,
+      "metadata": {
+        "description": "Log Analytics retention in days (30-730)"
+      }
     }
   },
   "variables": {
     "storageAccountName": "[format('ipgeoanalytics{0}sa', parameters('environment'))]",
     "storageShareName": "pgdata",
     "containerAppEnvName": "[format('ip-geo-analytics-{0}-env', parameters('environment'))]",
-    "storageMountName": "pgdatavolume"
+    "storageMountName": "pgdatavolume",
+    "logAnalyticsWorkspaceName": "[format('ip-geo-analytics-{0}-logs', parameters('environment'))]",
+    "appInsightsName": "[format('ip-geo-analytics-{0}-appinsights', parameters('environment'))]"
   },
   "resources": [
     {
@@ -90,13 +101,50 @@
       ]
     },
     {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('logAnalyticsWorkspaceName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "retentionInDays": "[parameters('logRetentionDays')]"
+      }
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[variables('appInsightsName')]",
+      "location": "[parameters('location')]",
+      "kind": "web",
+      "properties": {
+        "Application_Type": "web",
+        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsWorkspaceName'))]",
+        "IngestionMode": "LogAnalytics"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsWorkspaceName'))]"
+      ]
+    },
+    {
       "type": "Microsoft.App/managedEnvironments",
       "apiVersion": "2023-05-01",
       "name": "[variables('containerAppEnvName')]",
       "location": "[parameters('location')]",
       "properties": {
-        "zoneRedundant": false
-      }
+        "zoneRedundant": false,
+        "appLogsConfiguration": {
+          "destination": "log-analytics",
+          "logAnalyticsConfiguration": {
+            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsWorkspaceName')), '2023-09-01').customerId]",
+            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsWorkspaceName')), '2023-09-01').primarySharedKey]"
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsWorkspaceName'))]"
+      ]
     },
     {
       "type": "Microsoft.App/managedEnvironments/storages",
@@ -260,6 +308,18 @@
     "containerAppEnvName": {
       "type": "string",
       "value": "[variables('containerAppEnvName')]"
+    },
+    "appInsightsConnectionString": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]"
+    },
+    "appInsightsInstrumentationKey": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').InstrumentationKey]"
+    },
+    "logAnalyticsWorkspaceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsWorkspaceName'))]"
     }
   }
 }
