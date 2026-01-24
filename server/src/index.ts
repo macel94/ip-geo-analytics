@@ -228,10 +228,6 @@ fastify.get("/api/track", async (request, reply) => {
 
   try {
     await trackVisit(request, resolvedSiteId, referrer);
-    const pixel = Buffer.from(
-      "R0lGODlhAQABAPAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
-      "base64",
-    );
     reply
       .header(
         "Cache-Control",
@@ -239,8 +235,7 @@ fastify.get("/api/track", async (request, reply) => {
       )
       .header("Pragma", "no-cache")
       .header("Expires", "0")
-      .type("image/gif")
-      .send(pixel);
+      .send({ success: true });
   } catch (e) {
     request.log.error(e);
     errorCount++;
