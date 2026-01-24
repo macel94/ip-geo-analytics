@@ -9,7 +9,7 @@ on:
 
 env:
   AZURE_RESOURCE_GROUP: rg-ip-geo-analytics
-  AZURE_LOCATION: eastus
+  AZURE_LOCATION: westeurope
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
