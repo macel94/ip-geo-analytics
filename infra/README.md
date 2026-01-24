@@ -33,6 +33,21 @@ The deployment creates the following resources:
 
 ## Deployment
 
+### Pull Request Validation
+
+When you open a PR that modifies infrastructure files, the **Validate Bicep Infrastructure** workflow automatically runs:
+
+1. **Syntax validation**: Ensures Bicep code compiles without errors
+2. **What-if analysis**: Shows what resources would be created, modified, or deleted
+3. **PR comment**: Posts a summary of changes directly on the PR
+
+This allows you to review infrastructure changes before merging and deploying.
+
+**Triggered by changes to**:
+- `infra/**` (any Bicep files)
+- `.github/workflows/deploy-azure-container-apps.yml`
+- `.github/workflows/validate-bicep.yml`
+
 ### Via GitHub Actions (Recommended)
 
 The deployment workflow is triggered on:

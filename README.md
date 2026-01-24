@@ -156,11 +156,22 @@ The workflow will:
   - Application container app (external HTTPS ingress, scale-to-zero)
 - Verify deployment via health checks
 
+### Infrastructure Validation
+
+Pull requests that modify infrastructure files automatically trigger validation:
+
+- **Bicep syntax check**: Ensures the template compiles correctly
+- **What-if analysis**: Previews what resources would be created, modified, or deleted
+- **PR comments**: Automated feedback on infrastructure changes
+
+This allows reviewing infrastructure changes before deployment.
+
 ### Files
 
 - [`infra/main.bicep`](infra/main.bicep) - Infrastructure as Code template
 - [`infra/README.md`](infra/README.md) - Detailed infrastructure documentation
-- [`.github/workflows/deploy-azure-container-apps.yml`](.github/workflows/deploy-azure-container-apps.yml) - CI/CD workflow
+- [`.github/workflows/deploy-azure-container-apps.yml`](.github/workflows/deploy-azure-container-apps.yml) - Deployment workflow
+- [`.github/workflows/validate-bicep.yml`](.github/workflows/validate-bicep.yml) - PR validation workflow
 - [`docker-compose.azure.yml`](docker-compose.azure.yml) - Reference documentation (not used by deployment)
 
 ### Infrastructure

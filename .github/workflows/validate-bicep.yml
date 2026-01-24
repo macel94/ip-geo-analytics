@@ -1,0 +1,200 @@
+name: Validate Bicep Infrastructure
+
+on:
+  pull_request:
+    paths:
+      - 'infra/**'
+      - '.github/workflows/deploy-azure-container-apps.yml'
+      - '.github/workflows/validate-bicep.yml'
+
+env:
+  AZURE_RESOURCE_GROUP: rg-ip-geo-analytics
+  AZURE_LOCATION: eastus
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  validate:
+    name: Validate Infrastructure Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Validate Bicep Syntax
+        run: |
+          echo "## Bicep Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Validate Bicep syntax
+          echo "### Syntax Validation" >> $GITHUB_STEP_SUMMARY
+          if az bicep build --file infra/main.bicep 2>&1 | tee /tmp/bicep-build.log; then
+            echo "✅ Bicep syntax is valid" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Bicep syntax validation failed" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat /tmp/bicep-build.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          
+          # Show any warnings
+          if grep -i "warning" /tmp/bicep-build.log > /dev/null; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Warnings" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            grep -i "warning" /tmp/bicep-build.log >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Create Resource Group (if needed)
+        run: |
+          az group create \
+            --name ${{ env.AZURE_RESOURCE_GROUP }} \
+            --location ${{ env.AZURE_LOCATION }} \
+            --output none || true
+
+      - name: Run What-If Analysis
+        id: whatif
+        run: |
+          echo "### What-If Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Running deployment preview for staging environment..." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Run what-if analysis
+          WHATIF_OUTPUT=$(az deployment group what-if \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --template-file infra/main.bicep \
+            --parameters \
+              location=${{ env.AZURE_LOCATION }} \
+              environment=staging \
+              imageTag=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }} \
+              registryServer=${{ env.REGISTRY }} \
+              registryUsername=github-actions \
+              registryPassword=dummy-password-for-validation \
+              postgresPassword=dummy-password-for-validation \
+            --result-format FullResourcePayloads \
+            2>&1 || true)
+          
+          # Save output to file
+          echo "$WHATIF_OUTPUT" > /tmp/whatif-output.txt
+          
+          # Display results in summary
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$WHATIF_OUTPUT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          
+          # Check if what-if succeeded
+          if echo "$WHATIF_OUTPUT" | grep -i "error" > /dev/null; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ What-if analysis encountered errors" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ What-if analysis completed successfully" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Parse What-If Results
+        run: |
+          echo "### Resource Changes Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Count resource changes
+          CREATE_COUNT=$(grep -c "^  \+ " /tmp/whatif-output.txt || echo "0")
+          MODIFY_COUNT=$(grep -c "^  ~ " /tmp/whatif-output.txt || echo "0")
+          DELETE_COUNT=$(grep -c "^  - " /tmp/whatif-output.txt || echo "0")
+          NOCHANGE_COUNT=$(grep -c "^  = " /tmp/whatif-output.txt || echo "0")
+          
+          echo "| Change Type | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ➕ Create | $CREATE_COUNT |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔄 Modify | $MODIFY_COUNT |" >> $GITHUB_STEP_SUMMARY
+          echo "| ➖ Delete | $DELETE_COUNT |" >> $GITHUB_STEP_SUMMARY
+          echo "| ✓ No Change | $NOCHANGE_COUNT |" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Note**: This is a preview for the staging environment. Actual deployment may differ based on environment and runtime parameters." >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const whatifOutput = fs.readFileSync('/tmp/whatif-output.txt', 'utf8');
+            
+            // Truncate output if too long
+            const maxLength = 60000;
+            const truncatedOutput = whatifOutput.length > maxLength 
+              ? whatifOutput.substring(0, maxLength) + '\n\n...(truncated)'
+              : whatifOutput;
+            
+            const comment = `## 🔍 Bicep Infrastructure Validation
+            
+            **Status**: ✅ Validation Passed
+            
+            ### What-If Analysis Results
+            
+            <details>
+            <summary>Click to view detailed changes</summary>
+            
+            \`\`\`
+            ${truncatedOutput}
+            \`\`\`
+            
+            </details>
+            
+            This preview shows what would change in the **staging** environment if this PR is deployed.
+            
+            > **Note**: Actual deployment may differ based on environment-specific parameters and current Azure state.
+            `;
+            
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('Bicep Infrastructure Validation')
+            );
+            
+            // Update or create comment
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
+
+  validate-success:
+    name: All Validations Passed
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - name: Summary
+        run: |
+          echo "✅ All infrastructure validations passed!"
+          echo "The Bicep template is valid and ready for deployment."
