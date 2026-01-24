@@ -24,11 +24,18 @@ param registryPassword string
 @secure()
 param postgresPassword string
 
+@description('Log Analytics retention in days (30-730)')
+@minValue(30)
+@maxValue(730)
+param logRetentionDays int = 30
+
 // Variables
 var storageAccountName = 'ipgeoanalytics${environment}sa'
 var storageShareName = 'pgdata'
 var containerAppEnvName = 'ip-geo-analytics-${environment}-env'
 var storageMountName = 'pgdatavolume'
+var logAnalyticsWorkspaceName = 'ip-geo-analytics-${environment}-logs'
+var appInsightsName = 'ip-geo-analytics-${environment}-appinsights'
 
 // Storage Account for PostgreSQL persistence
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
@@ -54,12 +61,43 @@ resource fileShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2023-0
   }
 }
 
+// Log Analytics Workspace for Application Insights and Container Apps logging
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: logAnalyticsWorkspaceName
+  location: location
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: logRetentionDays
+  }
+}
+
+// Application Insights for monitoring and debugging
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: appInsightsName
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logAnalyticsWorkspace.id
+    IngestionMode: 'LogAnalytics'
+  }
+}
+
 // Container Apps Environment
 resource containerAppEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
   name: containerAppEnvName
   location: location
   properties: {
     zoneRedundant: false
+    appLogsConfiguration: {
+      destination: 'log-analytics'
+      logAnalyticsConfiguration: {
+        customerId: logAnalyticsWorkspace.properties.customerId
+        sharedKey: logAnalyticsWorkspace.listKeys().primarySharedKey
+      }
+    }
   }
 }
 
@@ -211,3 +249,6 @@ resource appContainerApp 'Microsoft.App/containerApps@2023-05-01' = {
 output appUrl string = 'https://${appContainerApp.properties.configuration.ingress.fqdn}'
 output storageAccountName string = storageAccount.name
 output containerAppEnvName string = containerAppEnv.name
+output appInsightsConnectionString string = appInsights.properties.ConnectionString
+output appInsightsInstrumentationKey string = appInsights.properties.InstrumentationKey
+output logAnalyticsWorkspaceId string = logAnalyticsWorkspace.id
