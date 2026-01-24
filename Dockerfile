@@ -43,8 +43,10 @@ COPY --from=server-builder /app/server/prisma ./server/prisma
 COPY --from=server-builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=client-builder /app/client/dist ./client/dist
 
-# Create directory for GeoIP database
-RUN mkdir -p /app/geoip
+# Create directory for GeoIP database and download MMDB
+RUN apk add --no-cache curl \
+	&& mkdir -p /app/geoip \
+	&& curl -L -o /app/geoip/GeoLite2-City.mmdb https://github.com/P3TERX/GeoLite.mmdb/releases/download/2026.01.22/GeoLite2-City.mmdb
 
 # Environment defaults
 ENV NODE_ENV=production

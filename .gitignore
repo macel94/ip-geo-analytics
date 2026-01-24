@@ -4,6 +4,9 @@
 .env
 .DS_Store
 
+# GeoIP database (downloaded at setup/build time)
+server/geoip/GeoLite2-City.mmdb
+
 # Playwright artifacts
 /test-results/
 /playwright-report/

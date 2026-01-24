@@ -37,6 +37,15 @@ else
     echo "server/.env already exists, skipping."
 fi
 
+echo -e "${GREEN}6b. Downloading GeoLite2 City DB...${NC}"
+if [ ! -f server/geoip/GeoLite2-City.mmdb ]; then
+  mkdir -p server/geoip
+  curl -L -o server/geoip/GeoLite2-City.mmdb https://github.com/P3TERX/GeoLite.mmdb/releases/download/2026.01.22/GeoLite2-City.mmdb
+  echo "Downloaded GeoLite2-City.mmdb"
+else
+  echo "GeoLite2-City.mmdb already exists, skipping."
+fi
+
 echo -e "${GREEN}7. Running Database Migrations...${NC}"
 cd server
 npx prisma db push --config prisma/prisma.config.ts
