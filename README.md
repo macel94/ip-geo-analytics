@@ -112,11 +112,18 @@ The root [Dockerfile](Dockerfile) builds client and server into a single image (
 
 This project uses **Azure Container Apps** for the cheapest possible deployment. Both the app and PostgreSQL run as containers within the same Container Apps environment, with PostgreSQL data persisted to Azure Files storage.
 
+### Infrastructure as Code
+
+The infrastructure is defined using **Bicep** templates in the [`infra/`](infra/) directory. See [infra/README.md](infra/README.md) for detailed documentation.
+
 ### Prerequisites
 
 1. An Azure subscription
 2. GitHub repository secrets configured:
    - `AZURE_CREDENTIALS`: Azure Service Principal credentials (JSON)
+   - `POSTGRES_PASSWORD`: PostgreSQL admin password (recommended for production, defaults to 'analytics123' for demo)
+
+> **⚠️ Security Note**: For production deployments, always set `POSTGRES_PASSWORD` as a GitHub secret. The default password is only for demo convenience.
 
 ### Setup Azure Credentials
 
@@ -141,18 +148,31 @@ The deployment is fully automated via GitHub Actions:
 2. **Manual**: Go to Actions → "Deploy to Azure Container Apps" → Run workflow
 
 The workflow will:
-- Build and push the Docker image to GitHub Container Registry
-- Create Azure Storage Account and File Share for persistent data
-- Create Azure Container Apps environment (if not exists)
-- Mount storage to Container Apps environment
-- Deploy PostgreSQL container with internal ingress and persistent volume
-- Deploy app container (external ingress, scale 0-3 replicas)
+- Create resource group (if not exists)
+- Deploy infrastructure using Bicep template:
+  - Storage Account with Azure Files share for PostgreSQL persistence
+  - Container Apps Environment with storage mount
+  - PostgreSQL container app (internal TCP ingress, persistent volume)
+  - Application container app (external HTTPS ingress, scale-to-zero)
 - Verify deployment via health checks
+
+### Infrastructure Validation
+
+Pull requests that modify infrastructure files automatically trigger validation:
+
+- **Bicep syntax check**: Ensures the template compiles correctly
+- **What-if analysis**: Previews what resources would be created, modified, or deleted
+- **PR comments**: Automated feedback on infrastructure changes
+
+This allows reviewing infrastructure changes before deployment.
 
 ### Files
 
-- [`docker-compose.azure.yml`](docker-compose.azure.yml) - Reference documentation showing container configuration (not used directly by workflow)
-- [`.github/workflows/deploy-azure-container-apps.yml`](.github/workflows/deploy-azure-container-apps.yml) - CI/CD workflow using `az containerapp create`
+- [`infra/main.bicep`](infra/main.bicep) - Infrastructure as Code template
+- [`infra/README.md`](infra/README.md) - Detailed infrastructure documentation
+- [`.github/workflows/deploy-azure-container-apps.yml`](.github/workflows/deploy-azure-container-apps.yml) - Deployment workflow
+- [`.github/workflows/validate-bicep.yml`](.github/workflows/validate-bicep.yml) - PR validation workflow
+- [`docker-compose.azure.yml`](docker-compose.azure.yml) - Reference documentation (not used by deployment)
 
 ### Infrastructure
 
@@ -160,7 +180,7 @@ The workflow will:
 |----------|---------|
 | Container Apps Environment | Hosts both containers |
 | App Container | Node.js application (scale 0-3) |
-| PostgreSQL Container | Database (1 replica, always-on) |
+| PostgreSQL Container | Database (scale 0-1, internal only) |
 | Storage Account | Persistent storage for PostgreSQL data |
 | Azure Files Share | Mounted to PostgreSQL at `/var/lib/postgresql/data` |
 
@@ -175,9 +195,9 @@ Azure Container Apps is the **cheapest option** for this type of deployment:
 | Azure PostgreSQL Flexible | ~$15+/month | Managed DB, more expensive |
 
 - **App container**: Scale-to-zero enabled (0-3 replicas) - pay nothing when idle
-- **PostgreSQL container**: Always 1 replica with persistent Azure Files storage
+- **PostgreSQL container**: Scale-to-zero enabled (0-1 replicas) with persistent Azure Files storage
 - **Storage**: ~$0.06/GB/month for Azure Files Standard (1GB quota configured)
-- **✅ Data persists**: Database data survives container restarts
+- **✅ Data persists**: Database data survives container restarts and scale-to-zero events
 
 ## Current ports
 
