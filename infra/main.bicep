@@ -116,10 +116,8 @@ resource envStorage 'Microsoft.App/managedEnvironments/storages@2023-05-01' = {
 }
 
 // PostgreSQL Container App
-// IMPORTANT: PostgreSQL must have minReplicas=1 because:
-// 1. It's a stateful workload that needs to be always available
-// 2. TCP connections cannot "wake up" a scaled-to-zero container like HTTP can
-// 3. The app container depends on PostgreSQL being available on startup
+// Uses TCP scale rule with cooldown to allow scale-to-zero while giving time
+// for database to be ready when connections resume
 resource postgresApp 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'postgres'
   location: location
@@ -166,31 +164,21 @@ resource postgresApp 'Microsoft.App/containerApps@2023-05-01' = {
               mountPath: '/var/lib/postgresql/data'
             }
           ]
-          probes: [
-            {
-              type: 'Liveness'
-              tcpSocket: {
-                port: 5432
-              }
-              initialDelaySeconds: 30
-              periodSeconds: 10
-              failureThreshold: 3
-            }
-            {
-              type: 'Readiness'
-              tcpSocket: {
-                port: 5432
-              }
-              initialDelaySeconds: 10
-              periodSeconds: 5
-              failureThreshold: 3
-            }
-          ]
         }
       ]
       scale: {
-        minReplicas: 1
+        minReplicas: 0
         maxReplicas: 1
+        rules: [
+          {
+            name: 'tcp-scale-rule'
+            tcp: {
+              metadata: {
+                concurrentConnections: '10'
+              }
+            }
+          }
+        ]
       }
       volumes: [
         {
@@ -250,10 +238,6 @@ resource appContainerApp 'Microsoft.App/containerApps@2023-05-01' = {
             {
               name: 'DATABASE_URL'
               value: 'postgresql://admin:${postgresPassword}@postgres:5432/analytics?schema=public'
-            }
-            {
-              name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
-              value: appInsights.properties.ConnectionString
             }
           ]
           resources: {

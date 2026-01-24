@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "8524200965704592924"
+      "templateHash": "10957344623671283605"
     }
   },
   "parameters": {
@@ -210,32 +210,22 @@
                   "volumeName": "[variables('storageMountName')]",
                   "mountPath": "/var/lib/postgresql/data"
                 }
-              ],
-              "probes": [
-                {
-                  "type": "Liveness",
-                  "tcpSocket": {
-                    "port": 5432
-                  },
-                  "initialDelaySeconds": 30,
-                  "periodSeconds": 10,
-                  "failureThreshold": 3
-                },
-                {
-                  "type": "Readiness",
-                  "tcpSocket": {
-                    "port": 5432
-                  },
-                  "initialDelaySeconds": 10,
-                  "periodSeconds": 5,
-                  "failureThreshold": 3
-                }
               ]
             }
           ],
           "scale": {
-            "minReplicas": 1,
-            "maxReplicas": 1
+            "minReplicas": 0,
+            "maxReplicas": 1,
+            "rules": [
+              {
+                "name": "tcp-scale-rule",
+                "tcp": {
+                  "metadata": {
+                    "concurrentConnections": "10"
+                  }
+                }
+              }
+            ]
           },
           "volumes": [
             {
@@ -296,10 +286,6 @@
                 {
                   "name": "DATABASE_URL",
                   "value": "[format('postgresql://admin:{0}@postgres:5432/analytics?schema=public', parameters('postgresPassword'))]"
-                },
-                {
-                  "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
-                  "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]"
                 }
               ],
               "resources": {
@@ -347,7 +333,6 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]",
         "[resourceId('Microsoft.App/managedEnvironments', variables('containerAppEnvName'))]",
         "[resourceId('Microsoft.App/containerApps', 'postgres')]"
       ]
