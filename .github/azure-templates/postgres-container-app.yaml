@@ -3,7 +3,6 @@ properties:
   configuration:
     activeRevisionsMode: Single
     ingress:
-      external: false
       targetPort: 5432
       transport: tcp
   template:
