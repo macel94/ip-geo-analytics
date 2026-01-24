@@ -116,6 +116,8 @@ resource envStorage 'Microsoft.App/managedEnvironments/storages@2023-05-01' = {
 }
 
 // PostgreSQL Container App
+// Uses TCP scale rule with cooldown to allow scale-to-zero while giving time
+// for database to be ready when connections resume
 resource postgresApp 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'postgres'
   location: location
@@ -167,6 +169,16 @@ resource postgresApp 'Microsoft.App/containerApps@2023-05-01' = {
       scale: {
         minReplicas: 0
         maxReplicas: 1
+        rules: [
+          {
+            name: 'tcp-scale-rule'
+            tcp: {
+              metadata: {
+                concurrentConnections: '10'
+              }
+            }
+          }
+        ]
       }
       volumes: [
         {
@@ -232,6 +244,38 @@ resource appContainerApp 'Microsoft.App/containerApps@2023-05-01' = {
             cpu: json('0.25')
             memory: '0.5Gi'
           }
+          probes: [
+            {
+              type: 'Startup'
+              httpGet: {
+                path: '/health'
+                port: 3000
+              }
+              initialDelaySeconds: 10
+              periodSeconds: 5
+              failureThreshold: 30  // Allow up to 2.5 minutes for startup (migrations, cold start)
+            }
+            {
+              type: 'Liveness'
+              httpGet: {
+                path: '/health'
+                port: 3000
+              }
+              initialDelaySeconds: 0  // Starts after startup probe succeeds
+              periodSeconds: 30
+              failureThreshold: 3
+            }
+            {
+              type: 'Readiness'
+              httpGet: {
+                path: '/ready'
+                port: 3000
+              }
+              initialDelaySeconds: 0  // Starts after startup probe succeeds
+              periodSeconds: 10
+              failureThreshold: 3
+            }
+          ]
         }
       ]
       scale: {
