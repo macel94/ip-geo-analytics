@@ -66,17 +66,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Extract package name from repository (owner/repo -> repo)
+          # Extract owner and package name from repository
+          OWNER=$(echo "${{ env.IMAGE_NAME }}" | cut -d'/' -f1)
           PACKAGE_NAME=$(echo "${{ env.IMAGE_NAME }}" | cut -d'/' -f2)
-          echo "Making package $PACKAGE_NAME public..."
+          echo "Making package $OWNER/$PACKAGE_NAME public..."
           
           # Use GitHub CLI to make the package public
           # Note: This requires the package to exist first, which it does after the push
           gh api --method PATCH \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            /user/packages/container/$PACKAGE_NAME \
-            -f visibility='public' || echo "Package may already be public or require manual configuration"
+            /users/$OWNER/packages/container/$PACKAGE_NAME \
+            -f visibility='public' || echo "⚠️ Failed to set package visibility. Package may already be public or require manual configuration at https://github.com/users/$OWNER/packages/container/$PACKAGE_NAME/settings"
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
