@@ -53,6 +53,7 @@ jobs:
         id: deploy
         run: |
           # Deploy using Bicep
+          # Note: Registry credentials are omitted since images are public on GHCR
           DEPLOYMENT_OUTPUT=$(az deployment group create \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --template-file infra/main.bicep \
@@ -61,8 +62,6 @@ jobs:
               environment=${{ github.event.inputs.environment || 'staging' }} \
               imageTag=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }} \
               registryServer=${{ env.REGISTRY }} \
-              registryUsername=${{ github.actor }} \
-              registryPassword=${{ secrets.GITHUB_TOKEN }} \
               postgresPassword=${{ secrets.POSTGRES_PASSWORD || 'analytics123' }} \
             --query 'properties.outputs' \
             -o json)
