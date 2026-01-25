@@ -87,7 +87,7 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
 }
 
 // Container Apps Environment
-resource containerAppEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
+resource containerAppEnv 'Microsoft.App/managedEnvironments@2025-10-02-preview' = {
   name: containerAppEnvName
   location: location
   properties: {
@@ -103,7 +103,7 @@ resource containerAppEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
 }
 
 // Storage mount configuration for Container Apps Environment
-resource envStorage 'Microsoft.App/managedEnvironments/storages@2023-05-01' = {
+resource envStorage 'Microsoft.App/managedEnvironments/storages@2025-10-02-preview' = {
   name: storageMountName
   parent: containerAppEnv
   properties: {
@@ -120,7 +120,7 @@ resource envStorage 'Microsoft.App/managedEnvironments/storages@2023-05-01' = {
 // Configured for scale-to-zero to optimize costs. The app container has retry logic
 // to handle cold-start scenarios when PostgreSQL needs to wake up.
 // TCP scale rule triggers scale-up when connections are attempted.
-resource postgresApp 'Microsoft.App/containerApps@2023-05-01' = {
+resource postgresApp 'Microsoft.App/containerApps@2025-10-02-preview' = {
   name: 'postgres'
   location: location
   properties: {
@@ -173,7 +173,7 @@ resource postgresApp 'Microsoft.App/containerApps@2023-05-01' = {
                 port: 5432
               }
               initialDelaySeconds: 15
-              periodSeconds: 20
+              periodSeconds: 60  // Check every minute instead of every 20 seconds
               failureThreshold: 3
             }
           ]
@@ -182,6 +182,8 @@ resource postgresApp 'Microsoft.App/containerApps@2023-05-01' = {
       scale: {
         minReplicas: 0
         maxReplicas: 1
+        cooldownPeriod: 600  // 10 minutes cooldown period before scaling down
+        pollingInterval: 60  // Check metrics every 60 seconds instead of default 30
         rules: [
           {
             name: 'tcp-scale-rule'
@@ -209,7 +211,7 @@ resource postgresApp 'Microsoft.App/containerApps@2023-05-01' = {
 }
 
 // Application Container App
-resource appContainerApp 'Microsoft.App/containerApps@2023-05-01' = {
+resource appContainerApp 'Microsoft.App/containerApps@2025-10-02-preview' = {
   name: 'app'
   location: location
   properties: {
