@@ -103,3 +103,45 @@ updates:
       docker:
         patterns:
           - "*"
+
+  # Docker Compose
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 1
+    reviewers:
+      - "macel94"
+    labels:
+      - "dependencies"
+      - "docker-compose"
+      - "automated"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      docker-compose:
+        patterns:
+          - "*"
+
+  # Dev Containers
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 1
+    reviewers:
+      - "macel94"
+    labels:
+      - "dependencies"
+      - "devcontainers"
+      - "automated"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      devcontainers:
+        patterns:
+          - "*"
