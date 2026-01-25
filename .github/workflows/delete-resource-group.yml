@@ -118,8 +118,7 @@ jobs:
       - name: Wait for Deletion (Optional)
         if: steps.list_resources.outputs.group_exists == 'true'
         run: |
-          echo "Monitoring deletion progress..."
-          echo "Press Ctrl+C to stop monitoring (deletion will continue in background)"
+          echo "Monitoring deletion progress (up to 10 minutes)..."
           
           # Monitor for up to 10 minutes
           for i in {1..60}; do
