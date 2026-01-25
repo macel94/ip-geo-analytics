@@ -1,0 +1,71 @@
+name: Make Docker Package Public
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: 'Package name (default: ip-geo-analytics)'
+        required: false
+        default: 'ip-geo-analytics'
+        type: string
+
+jobs:
+  make-public:
+    name: Make Package Public
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    
+    steps:
+      - name: Make package public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE_NAME: ${{ inputs.package_name }}
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          echo "Making package $OWNER/$PACKAGE_NAME public..."
+          
+          # Check if package exists first
+          if ! gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /users/$OWNER/packages/container/$PACKAGE_NAME >/dev/null 2>&1; then
+            echo "❌ Package not found: $OWNER/$PACKAGE_NAME"
+            echo "Make sure the package exists at: https://github.com/users/$OWNER/packages/container/$PACKAGE_NAME"
+            exit 1
+          fi
+          
+          # Use GitHub CLI to make the package public
+          if gh api --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /users/$OWNER/packages/container/$PACKAGE_NAME \
+            -f visibility='public'; then
+            echo "✅ Package is now public!"
+          else
+            echo "❌ Failed to set package visibility"
+            echo "You may need to manually configure it at: https://github.com/users/$OWNER/packages/container/$PACKAGE_NAME/settings"
+            exit 1
+          fi
+          
+      - name: Verify package is public
+        env:
+          PACKAGE_NAME: ${{ inputs.package_name }}
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          echo "Verifying package visibility..."
+          VISIBILITY=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /users/$OWNER/packages/container/$PACKAGE_NAME \
+            --jq '.visibility' || echo "unknown")
+          
+          echo "Current visibility: $VISIBILITY"
+          
+          if [ "$VISIBILITY" = "public" ]; then
+            echo "✅ Package is public and can be pulled without authentication"
+            echo "Test with: docker pull ghcr.io/$OWNER/$PACKAGE_NAME:latest"
+          else
+            echo "⚠️ Package visibility is: $VISIBILITY"
+            echo "You may need to manually change it at: https://github.com/users/$OWNER/packages/container/$PACKAGE_NAME/settings"
+          fi

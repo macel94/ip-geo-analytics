@@ -12,13 +12,13 @@ param imageTag string
 @description('Container registry server')
 param registryServer string = 'ghcr.io'
 
-@description('Container registry username')
+@description('Container registry username (leave empty for public images)')
 @secure()
-param registryUsername string
+param registryUsername string = ''
 
-@description('Container registry password')
+@description('Container registry password (leave empty for public images)')
 @secure()
-param registryPassword string
+param registryPassword string = ''
 
 @description('PostgreSQL admin password')
 @secure()
@@ -223,19 +223,21 @@ resource appContainerApp 'Microsoft.App/containerApps@2025-10-02-preview' = {
         targetPort: 3000
         transport: 'auto'
       }
-      registries: [
+      // Only include registry credentials if BOTH are provided (for private images)
+      // Public images on GHCR don't require authentication
+      registries: !empty(registryUsername) && !empty(registryPassword) ? [
         {
           server: registryServer
           username: registryUsername
           passwordSecretRef: 'registry-password'
         }
-      ]
-      secrets: [
+      ] : []
+      secrets: !empty(registryUsername) && !empty(registryPassword) ? [
         {
           name: 'registry-password'
           value: registryPassword
         }
-      ]
+      ] : []
     }
     template: {
       containers: [
