@@ -16,6 +16,8 @@ on:
         type: string
 
 env:
+  # Note: This resource group name must match the one used in deploy-azure-container-apps.yml
+  # All environments (staging and production) use the same resource group
   AZURE_RESOURCE_GROUP: rg-ip-geo-analytics
   AZURE_LOCATION: westeurope
 
@@ -108,12 +110,8 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Resources Deleted" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "All resources in the resource group will be deleted, including:" >> $GITHUB_STEP_SUMMARY
-          echo "- Container Apps (app, postgres)" >> $GITHUB_STEP_SUMMARY
-          echo "- Container Apps Environment" >> $GITHUB_STEP_SUMMARY
-          echo "- Storage Account (with PostgreSQL data)" >> $GITHUB_STEP_SUMMARY
-          echo "- Log Analytics Workspace" >> $GITHUB_STEP_SUMMARY
-          echo "- Application Insights" >> $GITHUB_STEP_SUMMARY
+          echo "All resources in the resource group will be deleted." >> $GITHUB_STEP_SUMMARY
+          echo "See the list above for specific resources." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "⚠️ **Warning:** This action is irreversible. All data will be permanently deleted." >> $GITHUB_STEP_SUMMARY
 
