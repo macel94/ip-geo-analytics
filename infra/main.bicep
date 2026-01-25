@@ -34,6 +34,7 @@ var storageAccountName = 'ipgeoanalytics${environment}sa'
 var storageShareName = 'pgdata'
 var containerAppEnvName = 'ip-geo-analytics-${environment}-env'
 var storageMountName = 'pgdatavolume'
+var postgresMountOptions = 'uid=70,gid=70,nobrl,mfsymlinks,cache=none,dir_mode=0700,file_mode=0700'
 var logAnalyticsWorkspaceName = 'ip-geo-analytics-${environment}-logs'
 var appInsightsName = 'ip-geo-analytics-${environment}-appinsights'
 
@@ -185,6 +186,7 @@ resource postgresApp 'Microsoft.App/containerApps@2023-05-01' = {
           name: storageMountName
           storageType: 'AzureFile'
           storageName: storageMountName
+          mountOptions: postgresMountOptions
         }
       ]
     }

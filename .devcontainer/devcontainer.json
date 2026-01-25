@@ -14,6 +14,9 @@
       "installZsh": true,
       "username": "node",
       "upgradePackages": true
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "latest"
     }
   },
   "customizations": {
