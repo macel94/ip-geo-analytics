@@ -45,7 +45,9 @@ git push origin main
 ```
 
 #### Option C: Manual Configuration via GitHub UI
-1. Go to: https://github.com/users/macel94/packages/container/ip-geo-analytics/settings
+1. Go to: https://github.com/users/{OWNER}/packages/container/{PACKAGE_NAME}/settings
+   - Replace `{OWNER}` with your GitHub username
+   - Replace `{PACKAGE_NAME}` with your package name (e.g., `ip-geo-analytics`)
 2. Scroll to "Danger Zone"
 3. Click "Change visibility"
 4. Select "Public"
@@ -55,7 +57,8 @@ git push origin main
 After making the package public, verify you can pull it without authentication:
 ```bash
 # Should work without docker login
-docker pull ghcr.io/macel94/ip-geo-analytics:latest
+# Replace with your actual owner and package name
+docker pull ghcr.io/{OWNER}/{PACKAGE_NAME}:latest
 ```
 
 ## Next Steps

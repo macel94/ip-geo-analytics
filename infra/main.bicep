@@ -221,7 +221,7 @@ resource appContainerApp 'Microsoft.App/containerApps@2023-05-01' = {
         targetPort: 3000
         transport: 'auto'
       }
-      // Only include registry credentials if provided (for private images)
+      // Only include registry credentials if BOTH are provided (for private images)
       // Public images on GHCR don't require authentication
       registries: !empty(registryUsername) && !empty(registryPassword) ? [
         {
@@ -230,7 +230,7 @@ resource appContainerApp 'Microsoft.App/containerApps@2023-05-01' = {
           passwordSecretRef: 'registry-password'
         }
       ] : []
-      secrets: !empty(registryPassword) ? [
+      secrets: !empty(registryUsername) && !empty(registryPassword) ? [
         {
           name: 'registry-password'
           value: registryPassword
