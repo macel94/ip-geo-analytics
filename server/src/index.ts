@@ -22,9 +22,108 @@ if (!databaseUrl) {
 }
 
 // Setup PostgreSQL connection pool for Prisma adapter
-const pool = new pg.Pool({ connectionString: databaseUrl });
+// Configure pool with retry-friendly settings for cold-start scenarios
+const pool = new pg.Pool({
+  connectionString: databaseUrl,
+  connectionTimeoutMillis: 30000, // 30s timeout for initial connection (cold start)
+  idleTimeoutMillis: 30000,
+  max: 10,
+});
+
+// Log pool errors but don't crash - allows retry logic to work
+pool.on("error", (err) => {
+  fastify.log.error({ err }, "PostgreSQL pool error");
+});
+
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
+
+// Database connection state tracking
+let dbConnected = false;
+let lastDbCheck = 0;
+const DB_CHECK_INTERVAL = 5000; // 5 seconds between checks
+
+/**
+ * Retry a database operation with exponential backoff.
+ * This is critical for Azure Container Apps where PostgreSQL may scale to zero
+ * and need time to wake up when the app starts or receives traffic.
+ */
+async function withDbRetry<T>(
+  operation: () => Promise<T>,
+  options: {
+    maxRetries?: number;
+    initialDelayMs?: number;
+    maxDelayMs?: number;
+    operationName?: string;
+  } = {},
+): Promise<T> {
+  const {
+    maxRetries = 5,
+    initialDelayMs = 1000,
+    maxDelayMs = 30000,
+    operationName = "database operation",
+  } = options;
+
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await operation();
+      if (!dbConnected) {
+        dbConnected = true;
+        fastify.log.info("Database connection established");
+      }
+      return result;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      dbConnected = false;
+
+      // Check if it's a connection error that's worth retrying
+      const isRetryable =
+        lastError.message.includes("ECONNREFUSED") ||
+        lastError.message.includes("connection") ||
+        lastError.message.includes("timeout") ||
+        lastError.message.includes("ETIMEDOUT") ||
+        lastError.message.includes("Can't reach database");
+
+      if (attempt < maxRetries && isRetryable) {
+        const delay = Math.min(
+          initialDelayMs * Math.pow(2, attempt - 1),
+          maxDelayMs,
+        );
+        fastify.log.warn(
+          `${operationName} failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms: ${lastError.message}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } else if (!isRetryable) {
+        // Non-retryable error, throw immediately
+        throw lastError;
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+/**
+ * Check database connectivity with caching to avoid hammering the DB
+ */
+async function checkDbConnection(): Promise<boolean> {
+  const now = Date.now();
+  if (dbConnected && now - lastDbCheck < DB_CHECK_INTERVAL) {
+    return true;
+  }
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    dbConnected = true;
+    lastDbCheck = now;
+    return true;
+  } catch {
+    dbConnected = false;
+    return false;
+  }
+}
 
 // Initialize services
 initGeoIp();
@@ -50,10 +149,15 @@ interface TrackQuery {
 }
 
 // Health Check Endpoint - for load balancers and monitoring
+// This endpoint uses retry logic to handle PostgreSQL cold-start scenarios
 fastify.get("/health", async (request, reply) => {
   try {
-    // Check database connectivity
-    await prisma.$queryRaw`SELECT 1`;
+    // Use retry logic to allow PostgreSQL to wake up from scale-to-zero
+    await withDbRetry(() => prisma.$queryRaw`SELECT 1`, {
+      maxRetries: 3,
+      initialDelayMs: 2000,
+      operationName: "health check",
+    });
     return {
       status: "healthy",
       timestamp: new Date().toISOString(),
@@ -71,14 +175,48 @@ fastify.get("/health", async (request, reply) => {
 });
 
 // Readiness Check - for Kubernetes/Container Apps
+// Uses aggressive retry to wake up PostgreSQL and keep connections active
 fastify.get("/ready", async (request, reply) => {
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    // Longer retry for readiness - this probe determines if traffic should be routed
+    await withDbRetry(() => prisma.$queryRaw`SELECT 1`, {
+      maxRetries: 6,
+      initialDelayMs: 2000,
+      maxDelayMs: 15000,
+      operationName: "readiness check",
+    });
     return { status: "ready" };
   } catch (error) {
     reply.code(503);
-    return { status: "not ready" };
+    return {
+      status: "not ready",
+      reason: error instanceof Error ? error.message : "Database unavailable",
+    };
   }
+});
+
+// Debug Endpoint - check what IP is being detected and GeoIP result
+fastify.get("/api/debug/ip", async (request, reply) => {
+  const ip = request.ip;
+  const xForwardedFor = request.headers["x-forwarded-for"];
+  const xRealIp = request.headers["x-real-ip"];
+  const geo = getGeoData(ip);
+
+  return {
+    resolvedIp: ip,
+    xForwardedFor,
+    xRealIp,
+    remoteAddress: request.socket?.remoteAddress,
+    geoData: geo,
+    note:
+      ip === "127.0.0.1" ||
+      ip === "::1" ||
+      ip?.startsWith("10.") ||
+      ip?.startsWith("172.") ||
+      ip?.startsWith("192.168.")
+        ? "Private/local IP detected - GeoIP lookup will not work for private IPs"
+        : "Public IP detected",
+  };
 });
 
 // Metrics Endpoint - basic Prometheus-style metrics
@@ -133,12 +271,27 @@ const trackVisit = async (
   // Fastify with trustProxy: true handles X-Forwarded-For automatically via request.ip
   const ip = request.ip;
 
+  // Debug logging for IP troubleshooting
+  const xForwardedFor = request.headers["x-forwarded-for"];
+  const xRealIp = request.headers["x-real-ip"];
+  request.log.info(
+    {
+      resolvedIp: ip,
+      xForwardedFor,
+      xRealIp,
+      remoteAddress: request.socket?.remoteAddress,
+    },
+    "IP resolution debug info",
+  );
+
   // GeoIP Lookup
   const geo = getGeoData(ip) || {
     city: null,
     country: null,
     countryCode: null,
   };
+
+  request.log.info({ ip, geo }, "GeoIP lookup result");
 
   // UA Parsing
   const ua = new UAParser(userAgentString);
@@ -208,12 +361,25 @@ fastify.post<{ Body: TrackBody }>("/api/track", async (request, reply) => {
   }
 
   try {
-    await trackVisit(request, resolvedSiteId, referrer);
+    // Use retry logic to handle PostgreSQL cold-start
+    await withDbRetry(() => trackVisit(request, resolvedSiteId, referrer), {
+      maxRetries: 3,
+      initialDelayMs: 2000,
+      operationName: "track visit",
+    });
     return { success: true };
   } catch (e) {
     request.log.error(e);
     errorCount++;
-    reply.code(500).send({ error: "Tracking failed" });
+    // Return 503 for database connectivity issues to signal temporary unavailability
+    const isDbError =
+      e instanceof Error &&
+      (e.message.includes("connection") || e.message.includes("ECONNREFUSED"));
+    reply.code(isDbError ? 503 : 500).send({
+      error: isDbError
+        ? "Service temporarily unavailable, please retry"
+        : "Tracking failed",
+    });
   }
 });
 
@@ -227,7 +393,12 @@ fastify.get("/api/track", async (request, reply) => {
   }
 
   try {
-    await trackVisit(request, resolvedSiteId, referrer);
+    // Use retry logic to handle PostgreSQL cold-start
+    await withDbRetry(() => trackVisit(request, resolvedSiteId, referrer), {
+      maxRetries: 3,
+      initialDelayMs: 2000,
+      operationName: "track visit",
+    });
     reply
       .header(
         "Cache-Control",
@@ -239,7 +410,14 @@ fastify.get("/api/track", async (request, reply) => {
   } catch (e) {
     request.log.error(e);
     errorCount++;
-    reply.code(500).send({ error: "Tracking failed" });
+    const isDbError =
+      e instanceof Error &&
+      (e.message.includes("connection") || e.message.includes("ECONNREFUSED"));
+    reply.code(isDbError ? 503 : 500).send({
+      error: isDbError
+        ? "Service temporarily unavailable, please retry"
+        : "Tracking failed",
+    });
   }
 });
 
@@ -248,37 +426,53 @@ fastify.get("/api/stats", async (request, reply) => {
   const { site_id } = request.query as { site_id?: string };
   const where = site_id ? { site_id } : {};
 
-  const [totalVisits, visitsByCountry] = await Promise.all([
-    prisma.visit.count({ where }),
-    prisma.visit.groupBy({
-      by: ["countryCode", "country"],
-      where,
-      _count: {
-        _all: true,
-      },
-      orderBy: {
-        _count: {
-          countryCode: "desc",
-        },
-      },
-      take: 10,
-    }),
-  ]);
+  try {
+    // Use retry logic to handle PostgreSQL cold-start
+    const [totalVisits, visitsByCountry, mapData] = await withDbRetry(
+      () =>
+        Promise.all([
+          prisma.visit.count({ where }),
+          prisma.visit.groupBy({
+            by: ["countryCode", "country"],
+            where,
+            _count: {
+              _all: true,
+            },
+            orderBy: {
+              _count: {
+                countryCode: "desc",
+              },
+            },
+            take: 10,
+          }),
+          prisma.visit.groupBy({
+            by: ["city", "countryCode"],
+            where: { ...where, city: { not: null } },
+            _count: { _all: true },
+            orderBy: {
+              _count: {
+                city: "desc",
+              },
+            },
+            take: 100,
+          }),
+        ]),
+      { maxRetries: 3, initialDelayMs: 2000, operationName: "fetch stats" },
+    );
 
-  // Simplified Map Data (Density by City)
-  const mapData = await prisma.visit.groupBy({
-    by: ["city", "countryCode"],
-    where: { ...where, city: { not: null } },
-    _count: { _all: true },
-    orderBy: {
-      _count: {
-        city: "desc",
-      },
-    },
-    take: 100, // Limit for performance
-  });
-
-  return { totalVisits, visitsByCountry, mapData };
+    return { totalVisits, visitsByCountry, mapData };
+  } catch (e) {
+    fastify.log.error(e);
+    errorCount++;
+    const isDbError =
+      e instanceof Error &&
+      (e.message.includes("connection") || e.message.includes("ECONNREFUSED"));
+    reply.code(isDbError ? 503 : 500).send({
+      error: isDbError
+        ? "Service temporarily unavailable, please retry"
+        : "Failed to fetch stats",
+    });
+  }
 });
 
 const start = async () => {

@@ -1,27 +1,42 @@
-import fs from 'fs';
-import path from 'path';
-import { Reader, ReaderModel } from '@maxmind/geoip2-node';
+import fs from "fs";
+import path from "path";
+import { Reader, ReaderModel } from "@maxmind/geoip2-node";
 
 // Singleton for GeoIP Reader
 let reader: ReaderModel | null = null;
-const DB_PATH = path.join(process.cwd(), 'geoip', 'GeoLite2-City.mmdb'); // Assuming file is mounted here
+
+// Look for GeoIP database in multiple locations for flexibility
+const POSSIBLE_PATHS = [
+  path.join(process.cwd(), "geoip", "GeoLite2-City.mmdb"), // CWD/geoip (local dev)
+  path.join(process.cwd(), "..", "geoip", "GeoLite2-City.mmdb"), // Parent dir (when CWD is server/)
+  "/app/geoip/GeoLite2-City.mmdb", // Absolute path in Docker
+  path.join(__dirname, "../../geoip", "GeoLite2-City.mmdb"), // Relative to compiled file
+];
+
+function findDbPath(): string | null {
+  for (const dbPath of POSSIBLE_PATHS) {
+    if (fs.existsSync(dbPath)) {
+      return dbPath;
+    }
+  }
+  return null;
+}
 
 export async function initGeoIp() {
   if (reader) return reader;
-  
-  // practical note: in production, you might want to download this from a URL or S3 bucket on startup 
-  // or use the maxmind-db library to watch for updates.
-  // For this demo, we assume the .mmdb file is present.
-  
+
+  const dbPath = findDbPath();
+
+  if (!dbPath) {
+    console.warn("GeoIP database not found. Searched paths:", POSSIBLE_PATHS);
+    return null;
+  }
+
   try {
-    if (fs.existsSync(DB_PATH)) {
-        reader = await Reader.open(DB_PATH);
-        console.log('GeoIP database loaded.');
-    } else {
-        console.warn('GeoIP database not found at', DB_PATH);
-    }
-  } catch(e) {
-      console.error("Failed to load GeoIP DB", e);
+    reader = await Reader.open(dbPath);
+    console.log("GeoIP database loaded from:", dbPath);
+  } catch (e) {
+    console.error("Failed to load GeoIP DB from", dbPath, e);
   }
   return reader;
 }
