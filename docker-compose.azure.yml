@@ -1,36 +1,44 @@
-# Docker Compose Reference File for Azure Container Apps
-# ========================================================
+# Docker Compose for Local Testing (Azure-like Configuration)
+# ============================================================
 #
-# IMPORTANT: This file is REFERENCE DOCUMENTATION ONLY.
-# The actual Azure deployment uses individual `az containerapp create` commands
-# with YAML configs to properly mount Azure Files storage for PostgreSQL persistence.
+# This file can be used to test the production Docker image locally.
+# It mirrors the Azure Container Apps deployment configuration.
 #
-# This file documents the container configuration but is NOT directly used by
-# the deployment workflow. It can be used for local development with Docker Compose.
+# USAGE:
+#   # Build locally and run:
+#   docker compose -f docker-compose.azure.yml up --build
 #
-# For actual deployment, see: .github/workflows/deploy-azure-container-apps.yml
+#   # Use latest image from GHCR (no local build):
+#   docker compose -f docker-compose.azure.yml up
 #
-# Cost optimized for test/demo: Uses Container Apps free tier with scale-to-zero.
-# Both containers share the free monthly quota (180k vCPU-sec, 360k GiB-sec).
-# PostgreSQL data is persisted to Azure Files storage mounted at /var/lib/postgresql/data.
+#   # Use a specific tag:
+#   IMAGE_TAG=v1.0.0 docker compose -f docker-compose.azure.yml up
+#
+# For actual Azure deployment, see: .github/workflows/deploy-azure-container-apps.yml
 
 services:
   postgres:
     image: postgres:18-alpine
     environment:
-      # For production, these should be passed as secrets
       - POSTGRES_USER=admin
       - POSTGRES_PASSWORD=analytics123
       - POSTGRES_DB=analytics
-      - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d analytics"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   app:
-    # For local development, build from context instead of using registry image
-    build: .
-    # Or use registry image (requires setting environment variables):
-    # image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-macel94/ip-geo-analytics}:${IMAGE_TAG:-latest}
+    # To build locally, use: docker compose -f docker-compose.azure.yml up --build
+    # To pull from GHCR, just run: docker compose -f docker-compose.azure.yml up
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-macel94/ip-geo-analytics}:${IMAGE_TAG:-latest}
     ports:
       - "3000:3000"
     environment:
@@ -38,7 +46,8 @@ services:
       - PORT=3000
       - DATABASE_URL=postgresql://admin:analytics123@postgres:5432/analytics?schema=public
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
 volumes:
   pgdata:

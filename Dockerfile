@@ -13,6 +13,9 @@ RUN npm run build --workspace=client
 # Stage 2: Build Server (TypeScript)
 FROM node:25-alpine AS server-builder
 WORKDIR /app
+# Prisma config requires DATABASE_URL (no DB connection needed for generate)
+ARG DATABASE_URL=postgresql://admin:analytics123@postgres:5432/analytics?schema=public
+ENV DATABASE_URL=$DATABASE_URL
 # Copy workspace root and all package files
 COPY package*.json ./
 COPY client/package*.json ./client/
@@ -20,7 +23,7 @@ COPY server ./server
 # Install dependencies
 RUN npm install
 # Generate Prisma Client
-RUN cd server && npx prisma generate
+RUN cd server && npx prisma generate --config prisma/prisma.config.ts
 # Build server
 RUN npm run build --workspace=server
 
@@ -55,5 +58,6 @@ ENV PORT=3000
 # Expose port
 EXPOSE 3000
 
-# Start command: Apply migrations (if needed) and start server
-CMD ["sh", "-c", "cd server && npx prisma migrate deploy && node dist/index.js"]
+# Start command: Apply schema (create tables if needed) and start server
+# Using db push for simplicity - it creates tables if they don't exist
+CMD ["sh", "-c", "cd server && npx prisma db push --config prisma/prisma.config.ts && node dist/index.js"]
