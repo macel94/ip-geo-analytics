@@ -1,0 +1,151 @@
+name: Delete Azure Resource Group
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to delete (staging or production)'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      confirm_deletion:
+        description: 'Type "DELETE" to confirm deletion of all resources'
+        required: true
+        type: string
+
+env:
+  AZURE_RESOURCE_GROUP: rg-ip-geo-analytics
+  AZURE_LOCATION: westeurope
+
+jobs:
+  confirm-and-delete:
+    name: Delete Resource Group
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Validate Confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm_deletion }}" != "DELETE" ]; then
+            echo "❌ Deletion cancelled. You must type 'DELETE' to confirm."
+            echo "You entered: '${{ github.event.inputs.confirm_deletion }}'"
+            exit 1
+          fi
+          echo "✅ Confirmation validated"
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: List Resources in Resource Group
+        id: list_resources
+        run: |
+          echo "## Resources to be deleted" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check if resource group exists
+          if ! az group exists --name ${{ env.AZURE_RESOURCE_GROUP }}; then
+            echo "⚠️ Resource group '${{ env.AZURE_RESOURCE_GROUP }}' does not exist" >> $GITHUB_STEP_SUMMARY
+            echo "Nothing to delete." >> $GITHUB_STEP_SUMMARY
+            echo "group_exists=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "group_exists=true" >> $GITHUB_OUTPUT
+          echo "**Resource Group:** ${{ env.AZURE_RESOURCE_GROUP }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # List all resources in the resource group
+          echo "### Resources:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          az resource list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --query '[].{Name:name, Type:type, Location:location}' \
+            --output table | tee resources.txt
+          
+          # Add to step summary
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat resources.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Delete Resource Group
+        if: steps.list_resources.outputs.group_exists == 'true'
+        run: |
+          echo "🗑️ Deleting resource group: ${{ env.AZURE_RESOURCE_GROUP }}"
+          echo "This may take several minutes..."
+          
+          az group delete \
+            --name ${{ env.AZURE_RESOURCE_GROUP }} \
+            --yes \
+            --no-wait
+          
+          echo "✅ Deletion initiated (running in background)"
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Deletion Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🗑️ **Deletion initiated successfully**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The resource group deletion is running in the background." >> $GITHUB_STEP_SUMMARY
+          echo "It may take several minutes for all resources to be removed." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Resource Group:** ${{ env.AZURE_RESOURCE_GROUP }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Verify Deletion" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "You can verify the deletion with:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "az group exists --name ${{ env.AZURE_RESOURCE_GROUP }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Resources Deleted" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All resources in the resource group will be deleted, including:" >> $GITHUB_STEP_SUMMARY
+          echo "- Container Apps (app, postgres)" >> $GITHUB_STEP_SUMMARY
+          echo "- Container Apps Environment" >> $GITHUB_STEP_SUMMARY
+          echo "- Storage Account (with PostgreSQL data)" >> $GITHUB_STEP_SUMMARY
+          echo "- Log Analytics Workspace" >> $GITHUB_STEP_SUMMARY
+          echo "- Application Insights" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Warning:** This action is irreversible. All data will be permanently deleted." >> $GITHUB_STEP_SUMMARY
+
+      - name: Wait for Deletion (Optional)
+        if: steps.list_resources.outputs.group_exists == 'true'
+        run: |
+          echo "Monitoring deletion progress..."
+          echo "Press Ctrl+C to stop monitoring (deletion will continue in background)"
+          
+          # Monitor for up to 10 minutes
+          for i in {1..60}; do
+            if ! az group exists --name ${{ env.AZURE_RESOURCE_GROUP }}; then
+              echo ""
+              echo "✅ Resource group successfully deleted!"
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "✅ **Deletion completed successfully**" >> $GITHUB_STEP_SUMMARY
+              exit 0
+            fi
+            
+            echo -n "."
+            sleep 10
+          done
+          
+          echo ""
+          echo "⏱️ Deletion is still in progress after 10 minutes"
+          echo "The deletion will continue in the background"
+
+      - name: Deletion Summary
+        if: always()
+        run: |
+          if [ "${{ steps.list_resources.outputs.group_exists }}" == "false" ]; then
+            echo "No resources were deleted (resource group did not exist)"
+          else
+            echo "Resource group deletion has been initiated"
+          fi
