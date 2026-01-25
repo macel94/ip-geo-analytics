@@ -17,7 +17,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INFRA_FILE="$ROOT_DIR/infra/main.bicep"
 
 REGISTRY="${REGISTRY:-ghcr.io}"
-AZURE_RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-rg-ip-geo-analytics}"
+AZURE_RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-rg-ip-geo-analytics1}"
 AZURE_LOCATION="${AZURE_LOCATION:-westeurope}"
 
 if [[ -z "${REGISTRY_USERNAME:-}" || -z "${REGISTRY_PASSWORD:-}" ]]; then

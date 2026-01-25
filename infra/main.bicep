@@ -4,7 +4,7 @@
 param location string = resourceGroup().location
 
 @description('Environment name (staging or production)')
-param environment string = 'staging'
+param environment string = 'staging1'
 
 @description('Container image tag')
 param imageTag string
