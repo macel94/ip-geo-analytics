@@ -153,9 +153,11 @@ interface TrackQuery {
 fastify.get("/health", async (request, reply) => {
   try {
     // Use retry logic to allow PostgreSQL to wake up from scale-to-zero
+    // PostgreSQL cold-start can take 30-60s, so we retry for up to ~90s
     await withDbRetry(() => prisma.$queryRaw`SELECT 1`, {
-      maxRetries: 3,
-      initialDelayMs: 2000,
+      maxRetries: 10,
+      initialDelayMs: 3000,
+      maxDelayMs: 15000,
       operationName: "health check",
     });
     return {
@@ -178,10 +180,11 @@ fastify.get("/health", async (request, reply) => {
 // Uses aggressive retry to wake up PostgreSQL and keep connections active
 fastify.get("/ready", async (request, reply) => {
   try {
-    // Longer retry for readiness - this probe determines if traffic should be routed
+    // Very aggressive retry for readiness - this keeps trying to wake up PostgreSQL
+    // Total retry time: ~2 minutes to handle cold-start scenarios
     await withDbRetry(() => prisma.$queryRaw`SELECT 1`, {
-      maxRetries: 6,
-      initialDelayMs: 2000,
+      maxRetries: 12,
+      initialDelayMs: 5000,
       maxDelayMs: 15000,
       operationName: "readiness check",
     });
@@ -361,10 +364,11 @@ fastify.post<{ Body: TrackBody }>("/api/track", async (request, reply) => {
   }
 
   try {
-    // Use retry logic to handle PostgreSQL cold-start
+    // Use retry logic to handle PostgreSQL cold-start (can take 30-60s)
     await withDbRetry(() => trackVisit(request, resolvedSiteId, referrer), {
-      maxRetries: 3,
-      initialDelayMs: 2000,
+      maxRetries: 8,
+      initialDelayMs: 3000,
+      maxDelayMs: 15000,
       operationName: "track visit",
     });
     return { success: true };
@@ -393,10 +397,11 @@ fastify.get("/api/track", async (request, reply) => {
   }
 
   try {
-    // Use retry logic to handle PostgreSQL cold-start
+    // Use retry logic to handle PostgreSQL cold-start (can take 30-60s)
     await withDbRetry(() => trackVisit(request, resolvedSiteId, referrer), {
-      maxRetries: 3,
-      initialDelayMs: 2000,
+      maxRetries: 8,
+      initialDelayMs: 3000,
+      maxDelayMs: 15000,
       operationName: "track visit",
     });
     reply
@@ -457,7 +462,12 @@ fastify.get("/api/stats", async (request, reply) => {
             take: 100,
           }),
         ]),
-      { maxRetries: 3, initialDelayMs: 2000, operationName: "fetch stats" },
+      {
+        maxRetries: 8,
+        initialDelayMs: 3000,
+        maxDelayMs: 15000,
+        operationName: "fetch stats",
+      },
     );
 
     return { totalVisits, visitsByCountry, mapData };

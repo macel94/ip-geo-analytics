@@ -117,12 +117,9 @@ resource envStorage 'Microsoft.App/managedEnvironments/storages@2023-05-01' = {
 }
 
 // PostgreSQL Container App
-// IMPORTANT: minReplicas=1 is strongly recommended for databases to avoid:
-// 1. Data consistency issues during cold-start
-// 2. Long startup times (30-60s) that cause dependent apps to fail
-// 3. Connection timeout cascades that are hard to recover from
-// If cost optimization is critical, consider Azure Database for PostgreSQL Flexible Server
-// with auto-pause instead of containerized PostgreSQL with scale-to-zero.
+// Configured for scale-to-zero to optimize costs. The app container has retry logic
+// to handle cold-start scenarios when PostgreSQL needs to wake up.
+// TCP scale rule triggers scale-up when connections are attempted.
 resource postgresApp 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'postgres'
   location: location
@@ -169,7 +166,6 @@ resource postgresApp 'Microsoft.App/containerApps@2023-05-01' = {
               mountPath: '/var/lib/postgresql/data'
             }
           ]
-          // Add liveness probe to ensure PostgreSQL is actually accepting connections
           probes: [
             {
               type: 'Liveness'
@@ -184,10 +180,18 @@ resource postgresApp 'Microsoft.App/containerApps@2023-05-01' = {
         }
       ]
       scale: {
-        // Keep PostgreSQL always running - databases should not scale to zero
-        // This prevents connection failures and long cold-start delays
-        minReplicas: 1
+        minReplicas: 0
         maxReplicas: 1
+        rules: [
+          {
+            name: 'tcp-scale-rule'
+            tcp: {
+              metadata: {
+                concurrentConnections: '1'  // Scale up on first connection attempt
+              }
+            }
+          }
+        ]
       }
       volumes: [
         {
@@ -258,16 +262,16 @@ resource appContainerApp 'Microsoft.App/containerApps@2023-05-01' = {
             {
               // Startup probe: Very generous timeout for initial startup
               // This handles: container cold-start, npm/node initialization, 
-              // and initial database connection with retries
+              // and initial database connection with retries (PostgreSQL may need 30-60s to wake)
               type: 'Startup'
               httpGet: {
                 path: '/health'
                 port: 3000
               }
               initialDelaySeconds: 5
-              periodSeconds: 10
-              timeoutSeconds: 10
-              failureThreshold: 18  // Allow up to 3 minutes for startup (18 * 10s)
+              periodSeconds: 15
+              timeoutSeconds: 120  // 2 minutes to allow for DB cold-start retries
+              failureThreshold: 12  // Allow up to 3 minutes for startup (12 * 15s)
             }
             {
               // Liveness probe: Checks if app process is healthy
@@ -278,8 +282,8 @@ resource appContainerApp 'Microsoft.App/containerApps@2023-05-01' = {
                 port: 3000
               }
               initialDelaySeconds: 0  // Starts after startup probe succeeds
-              periodSeconds: 30
-              timeoutSeconds: 15  // Allow time for DB connection retry
+              periodSeconds: 60  // Check every minute
+              timeoutSeconds: 120  // 2 minutes to allow PostgreSQL wake-up
               failureThreshold: 3
             }
             {
@@ -291,8 +295,8 @@ resource appContainerApp 'Microsoft.App/containerApps@2023-05-01' = {
                 port: 3000
               }
               initialDelaySeconds: 0  // Starts after startup probe succeeds
-              periodSeconds: 15  // Check frequently to recover quickly
-              timeoutSeconds: 30  // Allow time for PostgreSQL wake-up retries
+              periodSeconds: 30  // Check frequently to recover quickly
+              timeoutSeconds: 180  // 3 minutes to handle full PostgreSQL cold-start
               failureThreshold: 2  // Quick to mark not ready, but probe will keep trying
             }
           ]
