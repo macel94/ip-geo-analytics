@@ -35,7 +35,10 @@ pool.on("error", (err) => {
   fastify.log.error({ err }, "PostgreSQL pool error");
 });
 
-const adapter = new PrismaPg(pool);
+// Type assertion needed: @prisma/adapter-pg@7.5.0 bundles @types/pg@8.11.11
+// as a direct dependency, which conflicts with the project's @types/pg@8.18.0.
+// The runtime Pool object is fully compatible; only the TS declarations differ.
+const adapter = new PrismaPg(pool as any);
 const prisma = new PrismaClient({ adapter });
 
 // Database connection state tracking
