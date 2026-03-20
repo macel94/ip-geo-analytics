@@ -9,9 +9,6 @@ updates:
     open-pull-requests-limit: 1
     reviewers:
       - "macel94"
-    labels:
-      - "dependencies"
-      - "automated"
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -29,10 +26,6 @@ updates:
     open-pull-requests-limit: 1
     reviewers:
       - "macel94"
-    labels:
-      - "dependencies"
-      - "server"
-      - "automated"
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -50,10 +43,6 @@ updates:
     open-pull-requests-limit: 1
     reviewers:
       - "macel94"
-    labels:
-      - "dependencies"
-      - "client"
-      - "automated"
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -71,10 +60,6 @@ updates:
     open-pull-requests-limit: 1
     reviewers:
       - "macel94"
-    labels:
-      - "dependencies"
-      - "github-actions"
-      - "automated"
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -92,10 +77,6 @@ updates:
     open-pull-requests-limit: 1
     reviewers:
       - "macel94"
-    labels:
-      - "dependencies"
-      - "docker"
-      - "automated"
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -113,10 +94,6 @@ updates:
     open-pull-requests-limit: 1
     reviewers:
       - "macel94"
-    labels:
-      - "dependencies"
-      - "docker-compose"
-      - "automated"
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -134,10 +111,6 @@ updates:
     open-pull-requests-limit: 1
     reviewers:
       - "macel94"
-    labels:
-      - "dependencies"
-      - "devcontainers"
-      - "automated"
     commit-message:
       prefix: "chore"
       include: "scope"
