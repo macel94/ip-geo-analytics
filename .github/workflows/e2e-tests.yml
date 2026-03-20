@@ -20,7 +20,7 @@ jobs:
           POSTGRES_PASSWORD: password123
           POSTGRES_DB: analytics
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U admin -d analytics"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
