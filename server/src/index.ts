@@ -5,7 +5,6 @@ import fastifyStatic from "@fastify/static";
 import fastifyCors from "@fastify/cors";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import pg from "pg";
 import { initGeoIp, getGeoData } from "./services/geoip";
 import { UAParser } from "ua-parser-js";
 
@@ -21,21 +20,20 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is required to start the server.");
 }
 
-// Setup PostgreSQL connection pool for Prisma adapter
-// Configure pool with retry-friendly settings for cold-start scenarios
-const pool = new pg.Pool({
-  connectionString: databaseUrl,
-  connectionTimeoutMillis: 30000, // 30s timeout for initial connection (cold start)
-  idleTimeoutMillis: 30000,
-  max: 10,
-});
-
-// Log pool errors but don't crash - allows retry logic to work
-pool.on("error", (err) => {
-  fastify.log.error({ err }, "PostgreSQL pool error");
-});
-
-const adapter = new PrismaPg(pool);
+// Configure pool settings for Prisma adapter (created internally)
+const adapter = new PrismaPg(
+  {
+    connectionString: databaseUrl,
+    connectionTimeoutMillis: 30000, // 30s timeout for initial connection (cold start)
+    idleTimeoutMillis: 30000,
+    max: 10,
+  },
+  {
+    onPoolError: (err) => {
+      fastify.log.error({ err }, "PostgreSQL pool error");
+    },
+  },
+);
 const prisma = new PrismaClient({ adapter });
 
 // Database connection state tracking
