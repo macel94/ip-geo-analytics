@@ -115,7 +115,10 @@ function App() {
                 setCurrentLocation(resolvedLocation);
                 return resolvedLocation;
             } catch (error) {
-                console.warn('Unable to reverse geocode browser location', error);
+                console.warn(
+                    'Unable to reverse geocode browser location:',
+                    error instanceof Error ? error.message : error,
+                );
                 return nextLocation;
             }
         })();

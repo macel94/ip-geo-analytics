@@ -3,11 +3,11 @@ import Fastify, { FastifyRequest } from "fastify";
 import path from "path";
 import fastifyStatic from "@fastify/static";
 import fastifyCors from "@fastify/cors";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import { initGeoIp, getGeoData } from "./services/geoip";
 import { UAParser } from "ua-parser-js";
-import { Prisma, PrismaClient } from "../../node_modules/.prisma/client/default";
 
 const fastify = Fastify({
   logger: true,
@@ -167,6 +167,14 @@ interface ClientLocation {
   city?: string;
   country?: string;
   countryCode?: string;
+}
+
+interface RawMapLocation {
+  city: string | null;
+  countryCode: string | null;
+  latitude: number;
+  longitude: number;
+  visit_count: bigint;
 }
 
 // Health Check Endpoint - for load balancers and monitoring
@@ -397,7 +405,7 @@ const resolveClientLocation = (
     longitude,
     city: normalizeLocationField(locationDetails?.city),
     country: normalizeLocationField(locationDetails?.country),
-    countryCode: countryCode?.toUpperCase(),
+    countryCode: countryCode ? countryCode.toUpperCase() : undefined,
   };
 };
 
@@ -553,15 +561,7 @@ fastify.get("/api/stats", async (request, reply) => {
             },
             take: 10,
           }),
-          prisma.$queryRaw<
-            Array<{
-              city: string | null;
-              countryCode: string | null;
-              latitude: number;
-              longitude: number;
-              visit_count: bigint;
-            }>
-          >(Prisma.sql`
+          prisma.$queryRaw<RawMapLocation[]>(Prisma.sql`
             SELECT
               city,
               "countryCode",
@@ -585,7 +585,7 @@ fastify.get("/api/stats", async (request, reply) => {
       },
     );
 
-    const mapData = rawMapData.map((location: (typeof rawMapData)[number]) => ({
+    const mapData = rawMapData.map((location) => ({
       city: location.city,
       countryCode: location.countryCode,
       latitude: location.latitude,
