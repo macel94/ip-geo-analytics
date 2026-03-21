@@ -1,8 +1,6 @@
 ---
 theme: seriph
 title: Container-First Visitor Analytics
-info: |
-  Technical talk for the ip-geo-analytics project.
 class: text-center
 drawings:
   persist: false

@@ -4,21 +4,23 @@
 }
 
 .slidev-layout {
-  h1 {
-    @apply font-bold tracking-tight;
-  }
+  @apply text-slate-900;
+}
 
-  h2 {
-    @apply font-semibold;
-  }
+.slidev-layout h1 {
+  @apply font-bold tracking-tight;
+}
 
-  ul {
-    @apply mt-4 space-y-2;
-  }
+.slidev-layout h2 {
+  @apply font-semibold;
+}
 
-  li {
-    @apply leading-relaxed;
-  }
+.slidev-layout ul {
+  @apply mt-4 space-y-2;
+}
+
+.slidev-layout li {
+  @apply leading-relaxed;
 }
 
 .eyebrow {

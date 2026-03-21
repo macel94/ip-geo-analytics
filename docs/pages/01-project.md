@@ -33,7 +33,7 @@ class: text-left
 
 # Container map
 
-```mermaid {scale: 0.9}
+```mermaid
 flowchart LR
     A[Dev Container] --> B[App Code]
     C[Docker Compose\nPostgres] --> B
