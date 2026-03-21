@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import VisitorMap from './components/Map';
 
 interface Stats {
@@ -16,41 +16,119 @@ interface Stats {
 interface BrowserLocation {
     latitude: number;
     longitude: number;
+    city?: string | null;
+    country?: string | null;
+    countryCode?: string | null;
 }
 
 function App() {
     const [stats, setStats] = useState<Stats | null>(null);
     const [siteId, setSiteId] = useState('');
     const [currentLocation, setCurrentLocation] = useState<BrowserLocation | null>(null);
+    const locationRequestRef = useRef<Promise<BrowserLocation | null> | null>(null);
+
+    const reverseGeocodeLocation = async (location: BrowserLocation) => {
+        const params = new URLSearchParams({
+            format: 'jsonv2',
+            lat: String(location.latitude),
+            lon: String(location.longitude),
+            zoom: '10',
+            addressdetails: '1',
+            layer: 'address',
+        });
+
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params.toString()}`, {
+            headers: {
+                Accept: 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to reverse geocode browser location');
+        }
+
+        const data = await response.json();
+        const address = data?.address ?? {};
+        const city =
+            address.city ??
+            address.town ??
+            address.village ??
+            address.municipality ??
+            address.suburb ??
+            address.county ??
+            null;
+        const country = address.country ?? null;
+        const countryCode = typeof address.country_code === 'string'
+            ? address.country_code.toUpperCase()
+            : null;
+
+        return {
+            city,
+            country,
+            countryCode,
+        };
+    };
 
     const resolveBrowserLocation = async () => {
-        if (currentLocation) {
-            return currentLocation;
+        if (locationRequestRef.current) {
+            return locationRequestRef.current;
         }
 
-        if (typeof window === 'undefined' || !('geolocation' in navigator)) {
-            return null;
-        }
+        const request = (async () => {
+            let nextLocation = currentLocation;
+
+            if (!nextLocation) {
+                if (typeof window === 'undefined' || !('geolocation' in navigator)) {
+                    return null;
+                }
+
+                try {
+                    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(resolve, reject, {
+                            enableHighAccuracy: true,
+                            timeout: 10000,
+                            maximumAge: 300000,
+                        });
+                    });
+
+                    nextLocation = {
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                    };
+
+                    setCurrentLocation(nextLocation);
+                } catch (error) {
+                    console.warn('Unable to resolve browser location', error);
+                    return null;
+                }
+            }
+
+            if (nextLocation.city || nextLocation.country || nextLocation.countryCode) {
+                return nextLocation;
+            }
+
+            try {
+                const resolvedLocation = {
+                    ...nextLocation,
+                    ...(await reverseGeocodeLocation(nextLocation)),
+                };
+                setCurrentLocation(resolvedLocation);
+                return resolvedLocation;
+            } catch (error) {
+                console.warn(
+                    'Unable to reverse geocode browser location:',
+                    error instanceof Error ? error.message : error,
+                );
+                return nextLocation;
+            }
+        })();
+
+        locationRequestRef.current = request;
 
         try {
-            const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-                navigator.geolocation.getCurrentPosition(resolve, reject, {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 300000,
-                });
-            });
-
-            const nextLocation = {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-            };
-
-            setCurrentLocation(nextLocation);
-            return nextLocation;
-        } catch (error) {
-            console.warn('Unable to resolve browser location', error);
-            return null;
+            return await request;
+        } finally {
+            locationRequestRef.current = null;
         }
     };
 
@@ -80,6 +158,9 @@ function App() {
                 site_id: siteId || 'demo-site',
                 latitude: browserLocation?.latitude,
                 longitude: browserLocation?.longitude,
+                city: browserLocation?.city,
+                country: browserLocation?.country,
+                countryCode: browserLocation?.countryCode,
             })
         });
 

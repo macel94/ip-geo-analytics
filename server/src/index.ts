@@ -146,6 +146,9 @@ interface TrackBody {
   referrer?: string;
   latitude?: number;
   longitude?: number;
+  city?: string;
+  country?: string;
+  countryCode?: string;
 }
 
 interface TrackQuery {
@@ -153,6 +156,25 @@ interface TrackQuery {
   referrer?: string;
   latitude?: string;
   longitude?: string;
+  city?: string;
+  country?: string;
+  countryCode?: string;
+}
+
+interface ClientLocation {
+  latitude: number;
+  longitude: number;
+  city?: string;
+  country?: string;
+  countryCode?: string;
+}
+
+interface RawMapLocation {
+  city: string | null;
+  countryCode: string | null;
+  latitude: number;
+  longitude: number;
+  visit_count: bigint;
 }
 
 // Health Check Endpoint - for load balancers and monitoring
@@ -274,7 +296,7 @@ const trackVisit = async (
   request: FastifyRequest,
   site_id: string,
   referrer?: string,
-  clientLocation?: { latitude: number; longitude: number },
+  clientLocation?: ClientLocation,
 ) => {
   const userAgentString = request.headers["user-agent"] || "";
 
@@ -316,9 +338,9 @@ const trackVisit = async (
     data: {
       site_id,
       ip_address: ip,
-      city: geo.city,
-      country: geo.country,
-      countryCode: geo.countryCode,
+      city: geo.city ?? clientLocation?.city ?? null,
+      country: geo.country ?? clientLocation?.country ?? null,
+      countryCode: geo.countryCode ?? clientLocation?.countryCode ?? null,
       latitude: clientLocation?.latitude ?? geo.latitude,
       longitude: clientLocation?.longitude ?? geo.longitude,
       // asn: ... (requires ASN DB),
@@ -354,6 +376,11 @@ const parseCoordinate = (
 const resolveClientLocation = (
   latitudeValue?: number | string,
   longitudeValue?: number | string,
+  locationDetails?: {
+    city?: unknown;
+    country?: unknown;
+    countryCode?: unknown;
+  },
 ) => {
   const latitude = parseCoordinate(latitudeValue, -90, 90);
   const longitude = parseCoordinate(longitudeValue, -180, 180);
@@ -362,7 +389,24 @@ const resolveClientLocation = (
     return undefined;
   }
 
-  return { latitude, longitude };
+  const normalizeLocationField = (value: unknown) => {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+  };
+
+  const countryCode = normalizeLocationField(locationDetails?.countryCode);
+
+  return {
+    latitude,
+    longitude,
+    city: normalizeLocationField(locationDetails?.city),
+    country: normalizeLocationField(locationDetails?.country),
+    countryCode: countryCode ? countryCode.toUpperCase() : undefined,
+  };
 };
 
 const resolveSiteId = (
@@ -400,9 +444,14 @@ const resolveSiteId = (
 };
 
 fastify.post<{ Body: TrackBody }>("/api/track", async (request, reply) => {
-  const { site_id, referrer, latitude, longitude } = request.body;
+  const { site_id, referrer, latitude, longitude, city, country, countryCode } =
+    request.body;
   const resolvedSiteId = resolveSiteId(request, site_id, referrer);
-  const clientLocation = resolveClientLocation(latitude, longitude);
+  const clientLocation = resolveClientLocation(latitude, longitude, {
+    city,
+    country,
+    countryCode,
+  });
 
   if (!resolvedSiteId) {
     reply.code(400).send({ error: "site_id is required" });
@@ -437,9 +486,14 @@ fastify.post<{ Body: TrackBody }>("/api/track", async (request, reply) => {
 });
 
 fastify.get("/api/track", async (request, reply) => {
-  const { site_id, referrer, latitude, longitude } = request.query as TrackQuery;
+  const { site_id, referrer, latitude, longitude, city, country, countryCode } =
+    request.query as TrackQuery;
   const resolvedSiteId = resolveSiteId(request, site_id, referrer);
-  const clientLocation = resolveClientLocation(latitude, longitude);
+  const clientLocation = resolveClientLocation(latitude, longitude, {
+    city,
+    country,
+    countryCode,
+  });
 
   if (!resolvedSiteId) {
     reply.code(400).send({ error: "site_id is required" });
@@ -507,15 +561,7 @@ fastify.get("/api/stats", async (request, reply) => {
             },
             take: 10,
           }),
-          prisma.$queryRaw<
-            Array<{
-              city: string | null;
-              countryCode: string | null;
-              latitude: number;
-              longitude: number;
-              visit_count: bigint;
-            }>
-          >(Prisma.sql`
+          prisma.$queryRaw<RawMapLocation[]>(Prisma.sql`
             SELECT
               city,
               "countryCode",

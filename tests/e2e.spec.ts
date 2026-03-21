@@ -1,3 +1,6 @@
+import { execFileSync } from 'child_process';
+import { readFile } from 'fs/promises';
+import path from 'path';
 import { test, expect } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -15,6 +18,8 @@ import pg from 'pg';
 const API_BASE_URL = 'http://localhost:3000';
 // Use same DATABASE_URL as local development - these are non-production test credentials
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://admin:password123@localhost:5432/analytics?schema=public';
+const CLIENT_DIR = path.resolve(process.cwd(), 'client');
+const CLIENT_DIST_DIR = path.join(CLIENT_DIR, 'dist');
 
 // Initialize Prisma client for database validation
 let prisma: PrismaClient;
@@ -33,6 +38,7 @@ test.beforeAll(async () => {
   
   // Verify database connection
   await prisma.$connect();
+  execFileSync('npm', ['run', 'build'], { cwd: CLIENT_DIR, stdio: 'pipe' });
   console.log('✓ Database connection established');
 });
 
@@ -151,6 +157,19 @@ test.describe('E2E: Complete System Setup and Functionality', () => {
     console.log('✓ Analytics dashboard displays data');
   });
 
+  test('should bundle Leaflet styles so the deployed map layout renders correctly', async () => {
+    const indexHtml = await readFile(path.join(CLIENT_DIST_DIR, 'index.html'), 'utf8');
+    expect(indexHtml).not.toContain('unpkg.com/leaflet');
+
+    const cssAssetMatch = indexHtml.match(/assets\/[^"]+\.css/);
+    expect(cssAssetMatch).not.toBeNull();
+
+    const bundledCss = await readFile(path.join(CLIENT_DIST_DIR, cssAssetMatch![0]), 'utf8');
+    expect(bundledCss).toContain('.leaflet-container');
+
+    console.log('✓ Leaflet styles are bundled locally for production-safe map rendering');
+  });
+
   test('should simulate a visit and update the UI', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
@@ -181,9 +200,24 @@ test.describe('E2E: Complete System Setup and Functionality', () => {
     const siteId = `geo-mobile-${Date.now()}`;
     const latitude = 37.7749;
     const longitude = -122.4194;
+    const city = 'San Francisco';
+    const country = 'United States';
+    const countryCode = 'US';
 
     await context.grantPermissions(['geolocation'], { origin: 'http://localhost:5173' });
     await context.setGeolocation({ latitude, longitude });
+    await page.route('https://nominatim.openstreetmap.org/reverse?*', async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          address: {
+            city,
+            country,
+            country_code: countryCode.toLowerCase(),
+          },
+        }),
+      });
+    });
 
     await page.goto('/');
     await page.waitForLoadState('networkidle');
@@ -200,6 +234,9 @@ test.describe('E2E: Complete System Setup and Functionality', () => {
       site_id: siteId,
       latitude,
       longitude,
+      city,
+      country,
+      countryCode,
     });
 
     await expect.poll(async () => {
@@ -216,6 +253,9 @@ test.describe('E2E: Complete System Setup and Functionality', () => {
     expect(visit).not.toBeNull();
     expect(visit?.latitude).toBeCloseTo(latitude, 4);
     expect(visit?.longitude).toBeCloseTo(longitude, 4);
+    expect(visit?.city).toBe(city);
+    expect(visit?.country).toBe(country);
+    expect(visit?.countryCode).toBe(countryCode);
 
     const statsResponse = await request.get(`${API_BASE_URL}/api/stats?site_id=${siteId}`);
     const stats = await statsResponse.json();
@@ -226,6 +266,15 @@ test.describe('E2E: Complete System Setup and Functionality', () => {
 
     expect(matchingPoint).toBeTruthy();
     expect(matchingPoint._count._all).toBe(1);
+    expect(matchingPoint.city).toBe(city);
+    expect(matchingPoint.countryCode).toBe(countryCode);
+    expect(stats.visitsByCountry[0]).toMatchObject({
+      country,
+      _count: { _all: 1 },
+    });
+
+    await expect(page.locator('text=Top Countries')).toBeVisible();
+    await expect(page.locator(`li:has-text("${country}: 1")`)).toBeVisible();
 
     console.log(`✓ Browser geolocation stored and returned correctly: ${latitude}, ${longitude}`);
   });
