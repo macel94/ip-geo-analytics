@@ -1,206 +1,45 @@
 # ip-geo-analytics
 
-Visitor analytics demo (Fastify + Prisma + React/Vite) that records IP, User-Agent, referrer, and GeoIP data, then surfaces aggregates (map + charts).
+Visitor analytics demo built with Fastify, Prisma, PostgreSQL, React, and Vite.
 
-## Stack
-
-- Fastify 5, Prisma 7, PostgreSQL
-- React 18 + Vite 5, Leaflet, Chart.js
-- Docker/Docker Compose; Dev Container (Node 24) for local dev
-- **SRE Features**: Health checks, Prometheus metrics, automated CI/CD, security scanning
-
-## Quick Start (local)
+## Quick start
 
 ```bash
-# from repo root
-./scripts/setup_local.sh   # installs deps, starts Postgres via docker-compose, prisma db push
-./scripts/start_dev.sh     # runs Fastify (3000) + Vite (5173)
+npm run setup
+npm run dev
 ```
 
-## SRE & Operations
+- API: http://localhost:3000
+- Web: http://localhost:5173
 
-This project includes comprehensive SRE automation:
+## What’s here
 
-- 🚀 **CI/CD**: GitHub Actions for testing, building, security scanning, and deployment
-- 🔒 **Security**: Automated vulnerability scanning, Dependabot, secret detection
-- 📊 **Monitoring**: Health checks, Prometheus metrics
-- 🏗️ **Deployment**: Docker Compose-based Azure Container Apps deployment
-- 🔧 **Automation**: Database backups, health monitoring, load testing scripts
+- `server/` — Fastify + Prisma API
+- `client/` — React dashboard
+- `infra/` — Azure Container Apps Bicep templates
+- `docs/` — Slidev technical talk about the project’s container story
 
-**Documentation**:
-- **[SRE Guide](docs/SRE_GUIDE.md)** - Complete automation overview and quick start
-- **[SRE Runbook](docs/SRE_RUNBOOK.md)** - Operational procedures and troubleshooting
-- **[Automation Scripts](docs/AUTOMATION.md)** - Detailed script documentation
-
-**Key Endpoints**:
-- `/health` - Health check with database connectivity
-- `/ready` - Readiness probe for Container Apps
-- `/metrics` - Prometheus-compatible metrics
-
-## Environment
-
-- `server/.env` is created by setup with `DATABASE_URL` pointing to local Postgres.
-- GeoIP: place `GeoLite2-City.mmdb` at `server/geoip/GeoLite2-City.mmdb` (or adjust path in [server/src/services/geoip.ts](server/src/services/geoip.ts)).
-
-## Prisma 7 notes
-
-- Datasource URL now lives in [server/prisma/prisma.config.ts](server/prisma/prisma.config.ts); `schema.prisma` no longer contains `url`.
-- Prisma Client instantiation uses PostgreSQL adapter via `@prisma/adapter-pg` (see [server/src/index.ts](server/src/index.ts)).
-- Helpful commands (from `server/`):
-  - `npx prisma validate`
-  - `npx prisma format`
-  - `npx prisma generate`
-  - `npx prisma migrate status`
-  - `npx prisma db push` (for dev sync)
-
-## Scripts
-
-- `./scripts/setup_local.sh` — one-time/local bootstrap (deps, db, env, db push)
-- `./scripts/start_dev.sh` — concurrent dev servers (Fastify + Vite)
-- `./scripts/test_setup.sh` — prepare environment for E2E tests
-
-## Testing
-
-### E2E Tests
-
-Comprehensive end-to-end tests using Playwright that validate:
-- Database connectivity and schema correctness
-- Server API endpoints (/api/track, /api/stats)
-- Client application rendering and navigation
-- Visit tracking and data persistence
-- Analytics aggregation and filtering
-- Complete system integration
-
-**Setup and Run:**
+## Useful commands
 
 ```bash
-# One-time setup for E2E tests
-npm run test:setup    # or ./scripts/test_setup.sh
-
-# Run tests
-npm run test:e2e           # headless mode (CI/CD)
-npm run test:e2e:headed    # with browser visible
-npm run test:e2e:ui        # interactive UI mode
+npm run setup
+npm run dev
+npm run test:setup
+npm run test:e2e
+npm run docs:dev
+npm run docs:build
 ```
 
-**Test Coverage:**
-- ✓ Database schema validation
-- ✓ Server health checks and API responses
-- ✓ Visit tracking with IP, user-agent, and referrer
-- ✓ Data persistence across operations
-- ✓ UI rendering and interaction
-- ✓ Analytics filtering by site_id
-- ✓ Data integrity and aggregation
+## Container story
 
-### Continuous Integration
+This project leans on containers at every stage:
 
-The E2E tests run automatically on every pull request via GitHub Actions. The workflow:
-- Sets up PostgreSQL database service
-- Installs all dependencies
-- Generates Prisma client and pushes database schema
-- Builds the client application
-- Runs the complete E2E test suite
-- Uploads test reports and results as artifacts
+- a Dev Container for a consistent local development environment
+- Docker Compose for local PostgreSQL
+- a single production image built from the root `Dockerfile`
+- Playwright-driven E2E validation in CI
+- Azure Container Apps for deployment, scale-to-zero, and persistent PostgreSQL storage
 
-See [`.github/workflows/e2e-tests.yml`](.github/workflows/e2e-tests.yml) for the full workflow configuration.
+## Deployment
 
-## Docker
-
-The root [Dockerfile](Dockerfile) builds client and server into a single image (Node 24 Alpine). In prod the Fastify server serves the built SPA.
-
-## Deployment (Azure Container Apps)
-
-This project uses **Azure Container Apps** for the cheapest possible deployment. Both the app and PostgreSQL run as containers within the same Container Apps environment, with PostgreSQL data persisted to Azure Files storage.
-
-### Infrastructure as Code
-
-The infrastructure is defined using **Bicep** templates in the [`infra/`](infra/) directory. See [infra/README.md](infra/README.md) for detailed documentation.
-
-### Prerequisites
-
-1. An Azure subscription
-2. GitHub repository secrets configured:
-   - `AZURE_CREDENTIALS`: Azure Service Principal credentials (JSON)
-   - `POSTGRES_PASSWORD`: PostgreSQL admin password (recommended for production, defaults to 'analytics123' for demo)
-
-> **⚠️ Security Note**: For production deployments, always set `POSTGRES_PASSWORD` as a GitHub secret. The default password is only for demo convenience.
-
-### Setup Azure Credentials
-
-Create a Service Principal and configure it as a GitHub secret:
-
-```bash
-# Create Service Principal
-az ad sp create-for-rbac \
-  --name "ip-geo-analytics-deploy" \
-  --role contributor \
-  --scopes /subscriptions/{subscription-id}/resourceGroups/{resource-group} \
-  --sdk-auth
-
-# Copy the JSON output to GitHub secret AZURE_CREDENTIALS
-```
-
-### Deploy
-
-The deployment is fully automated via GitHub Actions:
-
-1. **Automatic**: Push a tag (e.g., `v1.0.0`) to trigger deployment
-2. **Manual**: Go to Actions → "Deploy to Azure Container Apps" → Run workflow
-
-The workflow will:
-- Create resource group (if not exists)
-- Deploy infrastructure using Bicep template:
-  - Storage Account with Azure Files share for PostgreSQL persistence
-  - Container Apps Environment with storage mount
-  - PostgreSQL container app (internal TCP ingress, persistent volume)
-  - Application container app (external HTTPS ingress, scale-to-zero)
-- Verify deployment via health checks
-
-### Infrastructure Validation
-
-Pull requests that modify infrastructure files automatically trigger validation:
-
-- **Bicep syntax check**: Ensures the template compiles correctly
-- **What-if analysis**: Previews what resources would be created, modified, or deleted
-- **PR comments**: Automated feedback on infrastructure changes
-
-This allows reviewing infrastructure changes before deployment.
-
-### Files
-
-- [`infra/main.bicep`](infra/main.bicep) - Infrastructure as Code template
-- [`infra/README.md`](infra/README.md) - Detailed infrastructure documentation
-- [`.github/workflows/deploy-azure-container-apps.yml`](.github/workflows/deploy-azure-container-apps.yml) - Deployment workflow
-- [`.github/workflows/validate-bicep.yml`](.github/workflows/validate-bicep.yml) - PR validation workflow
-- [`docker-compose.azure.yml`](docker-compose.azure.yml) - Reference documentation (not used by deployment)
-
-### Infrastructure
-
-| Resource | Purpose |
-|----------|---------|
-| Container Apps Environment | Hosts both containers |
-| App Container | Node.js application (scale 0-3) |
-| PostgreSQL Container | Database (scale 0-1, internal only) |
-| Storage Account | Persistent storage for PostgreSQL data |
-| Azure Files Share | Mounted to PostgreSQL at `/var/lib/postgresql/data` |
-
-### Cost Optimization
-
-Azure Container Apps is the **cheapest option** for this type of deployment:
-
-| Option | Cost | Notes |
-|--------|------|-------|
-| **Container Apps (current)** | **~$0.06/month** | Free tier + minimal storage |
-| App Service Basic | ~$13/month | Always-on, no scale-to-zero |
-| Azure PostgreSQL Flexible | ~$15+/month | Managed DB, more expensive |
-
-- **App container**: Scale-to-zero enabled (0-3 replicas) - pay nothing when idle
-- **PostgreSQL container**: Scale-to-zero enabled (0-1 replicas) with persistent Azure Files storage
-- **Storage**: ~$0.06/GB/month for Azure Files Standard (1GB quota configured)
-- **✅ Data persists**: Database data survives container restarts and scale-to-zero events
-
-## Current ports
-
-- API: 3000
-- Web: 5173
-- Postgres: 5432
+Infrastructure lives in [`infra/main.bicep`](infra/main.bicep). See [`infra/README.md`](infra/README.md) for Azure deployment details.

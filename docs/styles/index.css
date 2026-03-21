@@ -1,0 +1,34 @@
+:root {
+  --slidev-theme-primary: #2563eb;
+  --slidev-theme-secondary: #0f172a;
+}
+
+.slidev-layout {
+  h1 {
+    @apply font-bold tracking-tight;
+  }
+
+  h2 {
+    @apply font-semibold;
+  }
+
+  ul {
+    @apply mt-4 space-y-2;
+  }
+
+  li {
+    @apply leading-relaxed;
+  }
+}
+
+.eyebrow {
+  @apply uppercase tracking-[0.2em] text-xs font-semibold text-blue-600;
+}
+
+.card {
+  @apply rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm;
+}
+
+.code-panel {
+  @apply rounded-2xl bg-slate-950 text-white p-4 shadow-lg;
+}

@@ -8,6 +8,9 @@
   "scripts": {
     "setup": "./scripts/setup_local.sh",
     "dev": "./scripts/start_dev.sh",
+    "docs:dev": "npm --prefix docs run dev",
+    "docs:build": "npm --prefix docs run build",
+    "docs:export": "npm --prefix docs run export",
     "db:up": "docker-compose up -d",
     "db:down": "docker-compose down",
     "test:e2e": "playwright test",
@@ -19,6 +22,6 @@
     "@playwright/test": "^1.58.2",
     "@types/pg": "^8.18.0",
     "concurrently": "^9.2.1",
-    "playwright": "^1.57.0"
+    "playwright": "^1.58.2"
   }
 }
