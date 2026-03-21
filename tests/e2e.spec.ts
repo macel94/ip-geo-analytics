@@ -151,6 +151,22 @@ test.describe('E2E: Complete System Setup and Functionality', () => {
     console.log('✓ Analytics dashboard displays data');
   });
 
+  test('should bundle Leaflet styles so the deployed map layout renders correctly', async ({ request }) => {
+    const indexResponse = await request.get('http://localhost:5173/');
+    expect(indexResponse.ok()).toBeTruthy();
+
+    const indexHtml = await indexResponse.text();
+    expect(indexHtml).not.toContain('unpkg.com/leaflet');
+
+    const mainResponse = await request.get('http://localhost:5173/src/main.tsx');
+    expect(mainResponse.ok()).toBeTruthy();
+
+    const mainSource = await mainResponse.text();
+    expect(mainSource).toContain('leaflet/dist/leaflet.css');
+
+    console.log('✓ Leaflet styles are bundled locally for production-safe map rendering');
+  });
+
   test('should simulate a visit and update the UI', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
