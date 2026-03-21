@@ -13,12 +13,14 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
-    "test:setup": "./scripts/test_setup.sh"
+    "test:setup": "./scripts/test_setup.sh",
+    "docs:dev": "npm --prefix docs run dev",
+    "docs:build": "npm --prefix docs run build"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/pg": "^8.18.0",
     "concurrently": "^9.2.1",
-    "playwright": "^1.57.0"
+    "playwright": "^1.58.2"
   }
 }
