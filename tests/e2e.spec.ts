@@ -1,3 +1,6 @@
+import { execFileSync } from 'child_process';
+import { readFile } from 'fs/promises';
+import path from 'path';
 import { test, expect } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -15,6 +18,8 @@ import pg from 'pg';
 const API_BASE_URL = 'http://localhost:3000';
 // Use same DATABASE_URL as local development - these are non-production test credentials
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://admin:password123@localhost:5432/analytics?schema=public';
+const CLIENT_DIR = path.resolve(process.cwd(), 'client');
+const CLIENT_DIST_DIR = path.join(CLIENT_DIR, 'dist');
 
 // Initialize Prisma client for database validation
 let prisma: PrismaClient;
@@ -33,6 +38,7 @@ test.beforeAll(async () => {
   
   // Verify database connection
   await prisma.$connect();
+  execFileSync('npm', ['run', 'build'], { cwd: CLIENT_DIR, stdio: 'pipe' });
   console.log('✓ Database connection established');
 });
 
@@ -151,18 +157,15 @@ test.describe('E2E: Complete System Setup and Functionality', () => {
     console.log('✓ Analytics dashboard displays data');
   });
 
-  test('should bundle Leaflet styles so the deployed map layout renders correctly', async ({ request }) => {
-    const indexResponse = await request.get('http://localhost:5173/');
-    expect(indexResponse.ok()).toBeTruthy();
-
-    const indexHtml = await indexResponse.text();
+  test('should bundle Leaflet styles so the deployed map layout renders correctly', async () => {
+    const indexHtml = await readFile(path.join(CLIENT_DIST_DIR, 'index.html'), 'utf8');
     expect(indexHtml).not.toContain('unpkg.com/leaflet');
 
-    const mainResponse = await request.get('http://localhost:5173/src/main.tsx');
-    expect(mainResponse.ok()).toBeTruthy();
+    const cssAssetMatch = indexHtml.match(/assets\/[^"]+\.css/);
+    expect(cssAssetMatch).not.toBeNull();
 
-    const mainSource = await mainResponse.text();
-    expect(mainSource).toContain('leaflet/dist/leaflet.css');
+    const bundledCss = await readFile(path.join(CLIENT_DIST_DIR, cssAssetMatch![0]), 'utf8');
+    expect(bundledCss).toContain('.leaflet-container');
 
     console.log('✓ Leaflet styles are bundled locally for production-safe map rendering');
   });
