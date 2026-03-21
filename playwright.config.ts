@@ -45,7 +45,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,
       env: {
-        DATABASE_URL: 'postgresql://admin:password123@localhost:5432/analytics?schema=public'
+        DATABASE_URL: process.env.DATABASE_URL || 'postgresql://admin:password123@localhost:5432/analytics?schema=public'
       }
     },
     {

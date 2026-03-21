@@ -11,6 +11,9 @@ jobs:
     name: Run E2E Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+      options: --ipc=host
 
     services:
       postgres:
@@ -24,8 +27,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-        ports:
-          - 5432:5432
 
     steps:
       - name: Checkout code
@@ -48,7 +49,7 @@ jobs:
 
       - name: Create server .env file
         run: |
-          echo 'DATABASE_URL="postgresql://admin:password123@localhost:5432/analytics?schema=public"' > server/.env
+          echo 'DATABASE_URL="postgresql://admin:password123@postgres:5432/analytics?schema=public"' > server/.env
 
       - name: Generate Prisma Client
         run: cd server && npx prisma generate --config prisma/prisma.config.ts
@@ -59,14 +60,11 @@ jobs:
       - name: Build client
         run: cd client && npm run build
 
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps chromium
-
       - name: Run E2E tests
         run: npm run test:e2e
         env:
           CI: true
-          DATABASE_URL: postgresql://admin:password123@localhost:5432/analytics?schema=public
+          DATABASE_URL: postgresql://admin:password123@postgres:5432/analytics?schema=public
 
       - name: Upload Playwright Report
         uses: actions/upload-artifact@v7
