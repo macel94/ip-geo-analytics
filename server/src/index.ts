@@ -3,7 +3,7 @@ import Fastify, { FastifyRequest } from "fastify";
 import path from "path";
 import fastifyStatic from "@fastify/static";
 import fastifyCors from "@fastify/cors";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import { initGeoIp, getGeoData } from "./services/geoip";
@@ -144,11 +144,15 @@ fastify.register(fastifyStatic, {
 interface TrackBody {
   site_id?: string;
   referrer?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 interface TrackQuery {
   site_id?: string;
   referrer?: string;
+  latitude?: string;
+  longitude?: string;
 }
 
 // Health Check Endpoint - for load balancers and monitoring
@@ -270,6 +274,7 @@ const trackVisit = async (
   request: FastifyRequest,
   site_id: string,
   referrer?: string,
+  clientLocation?: { latitude: number; longitude: number },
 ) => {
   const userAgentString = request.headers["user-agent"] || "";
 
@@ -295,9 +300,11 @@ const trackVisit = async (
     city: null,
     country: null,
     countryCode: null,
+    latitude: null,
+    longitude: null,
   };
 
-  request.log.info({ ip, geo }, "GeoIP lookup result");
+  request.log.info({ ip, geo, clientLocation }, "GeoIP lookup result");
 
   // UA Parsing
   const ua = new UAParser(userAgentString);
@@ -312,6 +319,8 @@ const trackVisit = async (
       city: geo.city,
       country: geo.country,
       countryCode: geo.countryCode,
+      latitude: clientLocation?.latitude ?? geo.latitude,
+      longitude: clientLocation?.longitude ?? geo.longitude,
       // asn: ... (requires ASN DB),
       browser: browser.name,
       os: os.name,
@@ -321,6 +330,39 @@ const trackVisit = async (
     },
   });
   trackingCount++;
+};
+
+const parseCoordinate = (
+  value: number | string | undefined,
+  min: number,
+  max: number,
+) => {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  const parsed =
+    typeof value === "number" ? value : Number.parseFloat(String(value));
+
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    return undefined;
+  }
+
+  return parsed;
+};
+
+const resolveClientLocation = (
+  latitudeValue?: number | string,
+  longitudeValue?: number | string,
+) => {
+  const latitude = parseCoordinate(latitudeValue, -90, 90);
+  const longitude = parseCoordinate(longitudeValue, -180, 180);
+
+  if (latitude === undefined || longitude === undefined) {
+    return undefined;
+  }
+
+  return { latitude, longitude };
 };
 
 const resolveSiteId = (
@@ -358,8 +400,9 @@ const resolveSiteId = (
 };
 
 fastify.post<{ Body: TrackBody }>("/api/track", async (request, reply) => {
-  const { site_id, referrer } = request.body;
+  const { site_id, referrer, latitude, longitude } = request.body;
   const resolvedSiteId = resolveSiteId(request, site_id, referrer);
+  const clientLocation = resolveClientLocation(latitude, longitude);
 
   if (!resolvedSiteId) {
     reply.code(400).send({ error: "site_id is required" });
@@ -368,12 +411,15 @@ fastify.post<{ Body: TrackBody }>("/api/track", async (request, reply) => {
 
   try {
     // Use retry logic to handle PostgreSQL cold-start (can take 30-60s)
-    await withDbRetry(() => trackVisit(request, resolvedSiteId, referrer), {
-      maxRetries: 8,
-      initialDelayMs: 3000,
-      maxDelayMs: 15000,
-      operationName: "track visit",
-    });
+    await withDbRetry(
+      () => trackVisit(request, resolvedSiteId, referrer, clientLocation),
+      {
+        maxRetries: 8,
+        initialDelayMs: 3000,
+        maxDelayMs: 15000,
+        operationName: "track visit",
+      },
+    );
     return { success: true };
   } catch (e) {
     request.log.error(e);
@@ -391,8 +437,9 @@ fastify.post<{ Body: TrackBody }>("/api/track", async (request, reply) => {
 });
 
 fastify.get("/api/track", async (request, reply) => {
-  const { site_id, referrer } = request.query as TrackQuery;
+  const { site_id, referrer, latitude, longitude } = request.query as TrackQuery;
   const resolvedSiteId = resolveSiteId(request, site_id, referrer);
+  const clientLocation = resolveClientLocation(latitude, longitude);
 
   if (!resolvedSiteId) {
     reply.code(400).send({ error: "site_id is required" });
@@ -401,12 +448,15 @@ fastify.get("/api/track", async (request, reply) => {
 
   try {
     // Use retry logic to handle PostgreSQL cold-start (can take 30-60s)
-    await withDbRetry(() => trackVisit(request, resolvedSiteId, referrer), {
-      maxRetries: 8,
-      initialDelayMs: 3000,
-      maxDelayMs: 15000,
-      operationName: "track visit",
-    });
+    await withDbRetry(
+      () => trackVisit(request, resolvedSiteId, referrer, clientLocation),
+      {
+        maxRetries: 8,
+        initialDelayMs: 3000,
+        maxDelayMs: 15000,
+        operationName: "track visit",
+      },
+    );
     reply
       .header(
         "Cache-Control",
@@ -435,8 +485,12 @@ fastify.get("/api/stats", async (request, reply) => {
   const where = site_id ? { site_id } : {};
 
   try {
+    const siteFilter = site_id
+      ? Prisma.sql`AND site_id = ${site_id}`
+      : Prisma.empty;
+
     // Use retry logic to handle PostgreSQL cold-start
-    const [totalVisits, visitsByCountry, mapData] = await withDbRetry(
+    const [totalVisits, visitsByCountry, rawMapData] = await withDbRetry(
       () =>
         Promise.all([
           prisma.visit.count({ where }),
@@ -453,17 +507,29 @@ fastify.get("/api/stats", async (request, reply) => {
             },
             take: 10,
           }),
-          prisma.visit.groupBy({
-            by: ["city", "countryCode"],
-            where: { ...where, city: { not: null } },
-            _count: { _all: true },
-            orderBy: {
-              _count: {
-                city: "desc",
-              },
-            },
-            take: 100,
-          }),
+          prisma.$queryRaw<
+            Array<{
+              city: string | null;
+              countryCode: string | null;
+              latitude: number;
+              longitude: number;
+              visit_count: bigint;
+            }>
+          >(Prisma.sql`
+            SELECT
+              city,
+              "countryCode",
+              latitude,
+              longitude,
+              COUNT(*) AS visit_count
+            FROM "Visit"
+            WHERE latitude IS NOT NULL
+              AND longitude IS NOT NULL
+              ${siteFilter}
+            GROUP BY city, "countryCode", latitude, longitude
+            ORDER BY COUNT(*) DESC
+            LIMIT 100
+          `),
         ]),
       {
         maxRetries: 8,
@@ -472,6 +538,16 @@ fastify.get("/api/stats", async (request, reply) => {
         operationName: "fetch stats",
       },
     );
+
+    const mapData = rawMapData.map((location) => ({
+      city: location.city,
+      countryCode: location.countryCode,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      _count: {
+        _all: Number(location.visit_count),
+      },
+    }));
 
     return { totalVisits, visitsByCountry, mapData };
   } catch (e) {

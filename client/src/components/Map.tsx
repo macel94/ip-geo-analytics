@@ -1,39 +1,69 @@
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
+import { useEffect } from 'react';
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
 
 interface MapProps {
-    data: Array<{ city: string; countryCode: string; _count: { _all: number } }>;
+    data: Array<{
+        city: string | null;
+        countryCode: string | null;
+        latitude: number | null;
+        longitude: number | null;
+        _count: { _all: number };
+    }>;
+    currentLocation?: {
+        latitude: number;
+        longitude: number;
+    } | null;
 }
 
-export default function VisitorMap({ data }: MapProps) {
+function MapViewport({ center, zoom }: { center: [number, number]; zoom: number }) {
+    const map = useMap();
+
+    useEffect(() => {
+        map.setView(center, zoom);
+    }, [center, map, zoom]);
+
+    return null;
+}
+
+export default function VisitorMap({ data, currentLocation }: MapProps) {
     // Default center (Europe/Africa view)
-    const position: [number, number] = [20, 0];
+    const fallbackPosition: [number, number] = [20, 0];
+    const firstTrackedLocation = data.find((item) => item.latitude !== null && item.longitude !== null);
+    const activeCenter: [number, number] = currentLocation
+        ? [currentLocation.latitude, currentLocation.longitude]
+        : firstTrackedLocation
+            ? [firstTrackedLocation.latitude as number, firstTrackedLocation.longitude as number]
+            : fallbackPosition;
+    const zoom = currentLocation ? 11 : firstTrackedLocation ? 4 : 2;
 
     return (
-        <MapContainer center={position} zoom={2} style={{ height: '400px', width: '100%' }}>
+        <MapContainer center={fallbackPosition} zoom={2} style={{ height: '400px', width: '100%' }}>
+            <MapViewport center={activeCenter} zoom={zoom} />
             <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-            {data.map((item, idx) => {
-                 // Note: In a real app we need lat/long for each city. 
-                 // We could get this from the backend GeoIP lookup or geocode explicitly.
-                 // For this Scaffold, we will mock coordinates or assume backend sends lat/long.
-                 // Ideally, backend uses reader.city(ip).location.latitude
-                 // Setup Backend to return specific Lat/Long in the aggregation to make this work.
-                 
-                 // Simulating mock spread for demo if coordinates missing, OR assume backend provides lat/long.
-                 // Let's rely on a valid setup:
-                 // Ideally: data item should have lat/long.
-                 // Fallback for demo visualization (random scatter to show it works):
-                 const lat = (Math.random() * 160) - 80;
-                 const lng = (Math.random() * 360) - 180;
-                 return (
-                    <CircleMarker key={idx} center={[lat, lng]} radius={Math.log(item._count._all) * 5}>
+            {currentLocation ? (
+                <CircleMarker center={[currentLocation.latitude, currentLocation.longitude]} pathOptions={{ color: '#2563eb' }} radius={10}>
+                    <Popup>Your location</Popup>
+                </CircleMarker>
+            ) : null}
+            {data.map((item) => {
+                 if (item.latitude === null || item.longitude === null) {
+                     return null;
+                 }
+
+                  return (
+                    <CircleMarker
+                        key={`${item.latitude}-${item.longitude}`}
+                        center={[item.latitude, item.longitude]}
+                        radius={Math.max(6, Math.log(item._count._all + 1) * 5)}
+                    >
                         <Popup>
-                            {item.city}, {item.countryCode}: {item._count._all} visits
+                            {item.city || 'Unknown city'}, {item.countryCode || 'Unknown country'}: {item._count._all} visits
                         </Popup>
                     </CircleMarker>
-                 )
+                  )
             })}
         </MapContainer>
     );

@@ -177,6 +177,59 @@ test.describe('E2E: Complete System Setup and Functionality', () => {
     console.log(`✓ UI updated: ${initialVisits} → ${updatedVisits} visits`);
   });
 
+  test('should resolve browser geolocation for a simulated mobile visit', async ({ page, context, request }) => {
+    const siteId = `geo-mobile-${Date.now()}`;
+    const latitude = 37.7749;
+    const longitude = -122.4194;
+
+    await context.grantPermissions(['geolocation'], { origin: 'http://localhost:5173' });
+    await context.setGeolocation({ latitude, longitude });
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.locator('input[placeholder*="Site ID"]').fill(siteId);
+
+    const [trackRequest] = await Promise.all([
+      page.waitForRequest((pendingRequest) =>
+        pendingRequest.url().endsWith('/api/track') && pendingRequest.method() === 'POST'
+      ),
+      page.click('button:has-text("Simulate Visit")'),
+    ]);
+
+    expect(trackRequest.postDataJSON()).toMatchObject({
+      site_id: siteId,
+      latitude,
+      longitude,
+    });
+
+    await expect.poll(async () => {
+      const response = await request.get(`${API_BASE_URL}/api/stats?site_id=${siteId}`);
+      const data = await response.json();
+      return data.totalVisits;
+    }).toBe(1);
+
+    const visit = await prisma.visit.findFirst({
+      where: { site_id: siteId },
+      orderBy: { created_at: 'desc' },
+    });
+
+    expect(visit).not.toBeNull();
+    expect(visit?.latitude).toBeCloseTo(latitude, 4);
+    expect(visit?.longitude).toBeCloseTo(longitude, 4);
+
+    const statsResponse = await request.get(`${API_BASE_URL}/api/stats?site_id=${siteId}`);
+    const stats = await statsResponse.json();
+    const matchingPoint = stats.mapData.find((point: any) =>
+      Math.abs(point.latitude - latitude) < 0.0001 &&
+      Math.abs(point.longitude - longitude) < 0.0001
+    );
+
+    expect(matchingPoint).toBeTruthy();
+    expect(matchingPoint._count._all).toBe(1);
+
+    console.log(`✓ Browser geolocation stored and returned correctly: ${latitude}, ${longitude}`);
+  });
+
   test('should filter stats by site_id', async ({ page, request }) => {
     // First, create some test visits with specific site_id
     const testSiteId = 'filter-test-' + Date.now();

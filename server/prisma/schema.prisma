@@ -16,6 +16,8 @@ model Visit {
   city        String?
   country     String?
   countryCode String?
+  latitude    Float?
+  longitude   Float?
   asn         String?
   org         String?
 

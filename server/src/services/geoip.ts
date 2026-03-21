@@ -49,6 +49,8 @@ export function getGeoData(ip: string) {
       city: response.city?.names?.en || null,
       country: response.country?.names?.en || null,
       countryCode: response.country?.isoCode || null,
+      latitude: response.location?.latitude || null,
+      longitude: response.location?.longitude || null,
     };
   } catch (error) {
     // IP might not be in the database (e.g. localhost)
