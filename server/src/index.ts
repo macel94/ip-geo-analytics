@@ -3,7 +3,7 @@ import Fastify, { FastifyRequest } from "fastify";
 import path from "path";
 import fastifyStatic from "@fastify/static";
 import fastifyCors from "@fastify/cors";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import { initGeoIp, getGeoData } from "./services/geoip";
@@ -485,8 +485,12 @@ fastify.get("/api/stats", async (request, reply) => {
   const where = site_id ? { site_id } : {};
 
   try {
+    const siteFilter = site_id
+      ? Prisma.sql`AND site_id = ${site_id}`
+      : Prisma.empty;
+
     // Use retry logic to handle PostgreSQL cold-start
-    const [totalVisits, visitsByCountry, mapData] = await withDbRetry(
+    const [totalVisits, visitsByCountry, rawMapData] = await withDbRetry(
       () =>
         Promise.all([
           prisma.visit.count({ where }),
@@ -503,21 +507,29 @@ fastify.get("/api/stats", async (request, reply) => {
             },
             take: 10,
           }),
-          prisma.visit.groupBy({
-            by: ["city", "countryCode", "latitude", "longitude"],
-            where: {
-              ...where,
-              latitude: { not: null },
-              longitude: { not: null },
-            },
-            _count: { _all: true },
-            orderBy: {
-              _count: {
-                latitude: "desc",
-              },
-            },
-            take: 100,
-          }),
+          prisma.$queryRaw<
+            Array<{
+              city: string | null;
+              countryCode: string | null;
+              latitude: number;
+              longitude: number;
+              visit_count: bigint;
+            }>
+          >(Prisma.sql`
+            SELECT
+              city,
+              "countryCode",
+              latitude,
+              longitude,
+              COUNT(*) AS visit_count
+            FROM "Visit"
+            WHERE latitude IS NOT NULL
+              AND longitude IS NOT NULL
+              ${siteFilter}
+            GROUP BY city, "countryCode", latitude, longitude
+            ORDER BY COUNT(*) DESC
+            LIMIT 100
+          `),
         ]),
       {
         maxRetries: 8,
@@ -526,6 +538,16 @@ fastify.get("/api/stats", async (request, reply) => {
         operationName: "fetch stats",
       },
     );
+
+    const mapData = rawMapData.map((location) => ({
+      city: location.city,
+      countryCode: location.countryCode,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      _count: {
+        _all: Number(location.visit_count),
+      },
+    }));
 
     return { totalVisits, visitsByCountry, mapData };
   } catch (e) {

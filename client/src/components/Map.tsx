@@ -31,9 +31,8 @@ export default function VisitorMap({ data, currentLocation }: MapProps) {
     const firstTrackedLocation = data.find((item) => item.latitude !== null && item.longitude !== null);
     const activeCenter: [number, number] = currentLocation
         ? [currentLocation.latitude, currentLocation.longitude]
-        : firstTrackedLocation?.latitude !== null && firstTrackedLocation?.latitude !== undefined &&
-          firstTrackedLocation?.longitude !== null && firstTrackedLocation?.longitude !== undefined
-            ? [firstTrackedLocation.latitude, firstTrackedLocation.longitude]
+        : firstTrackedLocation
+            ? [firstTrackedLocation.latitude as number, firstTrackedLocation.longitude as number]
             : fallbackPosition;
     const zoom = currentLocation ? 11 : firstTrackedLocation ? 4 : 2;
 
@@ -49,14 +48,14 @@ export default function VisitorMap({ data, currentLocation }: MapProps) {
                     <Popup>Your location</Popup>
                 </CircleMarker>
             ) : null}
-            {data.map((item, idx) => {
+            {data.map((item) => {
                  if (item.latitude === null || item.longitude === null) {
                      return null;
                  }
 
                   return (
                     <CircleMarker
-                        key={`${item.city ?? 'unknown'}-${item.countryCode ?? 'unknown'}-${item.latitude}-${item.longitude}-${idx}`}
+                        key={`${item.latitude}-${item.longitude}`}
                         center={[item.latitude, item.longitude]}
                         radius={Math.max(6, Math.log(item._count._all + 1) * 5)}
                     >

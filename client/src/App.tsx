@@ -48,16 +48,21 @@ function App() {
 
             setCurrentLocation(nextLocation);
             return nextLocation;
-        } catch {
+        } catch (error) {
+            console.warn('Unable to resolve browser location', error);
             return null;
         }
     };
 
     const fetchStats = async () => {
-        const query = siteId ? `?site_id=${siteId}` : '';
-        const res = await fetch(`/api/stats${query}`);
-        const data = await res.json();
-        setStats(data);
+        try {
+            const query = siteId ? `?site_id=${siteId}` : '';
+            const res = await fetch(`/api/stats${query}`);
+            const data = await res.json();
+            setStats(data);
+        } catch (error) {
+            console.error('Failed to fetch analytics stats', error);
+        }
     };
 
     useEffect(() => {
@@ -68,7 +73,7 @@ function App() {
     // Simple tracking test
     const triggerTestVisit = async () => {
         const browserLocation = await resolveBrowserLocation();
-        await fetch('/api/track', {
+        const response = await fetch('/api/track', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -77,6 +82,11 @@ function App() {
                 longitude: browserLocation?.longitude,
             })
         });
+
+        if (!response.ok) {
+            throw new Error('Failed to track visit');
+        }
+
         await fetchStats();
     };
 
