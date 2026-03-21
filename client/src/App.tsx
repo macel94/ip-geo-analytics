@@ -4,12 +4,54 @@ import VisitorMap from './components/Map';
 interface Stats {
     totalVisits: number;
     visitsByCountry: Array<{ country: string, _count: { _all: number } }>;
-    mapData: Array<any>;
+    mapData: Array<{
+        city: string | null;
+        countryCode: string | null;
+        latitude: number | null;
+        longitude: number | null;
+        _count: { _all: number };
+    }>;
+}
+
+interface BrowserLocation {
+    latitude: number;
+    longitude: number;
 }
 
 function App() {
     const [stats, setStats] = useState<Stats | null>(null);
     const [siteId, setSiteId] = useState('');
+    const [currentLocation, setCurrentLocation] = useState<BrowserLocation | null>(null);
+
+    const resolveBrowserLocation = async () => {
+        if (currentLocation) {
+            return currentLocation;
+        }
+
+        if (typeof window === 'undefined' || !('geolocation' in navigator)) {
+            return null;
+        }
+
+        try {
+            const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 300000,
+                });
+            });
+
+            const nextLocation = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+            };
+
+            setCurrentLocation(nextLocation);
+            return nextLocation;
+        } catch {
+            return null;
+        }
+    };
 
     const fetchStats = async () => {
         const query = siteId ? `?site_id=${siteId}` : '';
@@ -19,17 +61,23 @@ function App() {
     };
 
     useEffect(() => {
-        fetchStats();
+        void fetchStats();
+        void resolveBrowserLocation();
     }, []);
 
     // Simple tracking test
     const triggerTestVisit = async () => {
+        const browserLocation = await resolveBrowserLocation();
         await fetch('/api/track', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ site_id: siteId || 'demo-site' })
+            body: JSON.stringify({
+                site_id: siteId || 'demo-site',
+                latitude: browserLocation?.latitude,
+                longitude: browserLocation?.longitude,
+            })
         });
-        fetchStats();
+        await fetchStats();
     };
 
     return (
@@ -70,8 +118,8 @@ function App() {
 
                     {/* Map Visualization */}
                     <div style={{ gridColumn: '1 / -1', border: '1px solid #ddd', height: '400px' }}>
-                         <VisitorMap data={stats.mapData} />
-                    </div>
+                         <VisitorMap data={stats.mapData} currentLocation={currentLocation} />
+                     </div>
 
                 </div>
             ) : (
