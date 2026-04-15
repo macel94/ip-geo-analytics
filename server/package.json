@@ -16,7 +16,7 @@
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",
     "dotenv": "^17.3.1",
-    "fastify": "^5.8.2",
+    "fastify": "^5.8.5",
     "fastify-plugin": "^5.0.0",
     "pg": "^8.20.0",
     "ua-parser-js": "^2.0.9"
