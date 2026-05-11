@@ -1,5 +1,5 @@
 # Stage 1: Build Client (Vite)
-FROM node:25-alpine AS client-builder
+FROM node:26-alpine AS client-builder
 WORKDIR /app
 # Copy workspace root and all package files
 COPY package*.json ./
@@ -11,7 +11,7 @@ RUN npm install
 RUN npm run build --workspace=client
 
 # Stage 2: Build Server (TypeScript)
-FROM node:25-alpine AS server-builder
+FROM node:26-alpine AS server-builder
 WORKDIR /app
 # Prisma config requires DATABASE_URL (no DB connection needed for generate)
 ARG DATABASE_URL=postgresql://admin:analytics123@postgres:5432/analytics?schema=public
@@ -28,7 +28,7 @@ RUN cd server && npx prisma generate --config prisma/prisma.config.ts
 RUN npm run build --workspace=server
 
 # Stage 3: Production Runtime
-FROM node:25-alpine
+FROM node:26-alpine
 WORKDIR /app
 
 # Copy workspace structure with package files
