@@ -18,8 +18,8 @@
     "docs:build": "npm --prefix docs run build"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2",
-    "@types/pg": "^8.18.0",
+    "@playwright/test": "^1.60.0",
+    "@types/pg": "^8.20.0",
     "concurrently": "^9.2.1",
     "playwright": "^1.58.2"
   }
